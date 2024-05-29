@@ -6,6 +6,7 @@ from sklearn.model_selection import train_test_split
 import torch
 from torch.utils.data import DataLoader, Dataset
 import torch.nn as nn
+import matplotlib.pyplot as plt
 from sklearn.metrics import accuracy_score, precision_score, recall_score, roc_auc_score
 
 
@@ -18,13 +19,14 @@ from src.Models import LSTMModel
 from src.Models import LSTMModelWithAttention
 from src.DataExplorer import DataExplorer
 
-csv_path = os.path.join(project_root, "data/raw/mimiciv/mimic.csv")
+csv_path = os.path.join(project_root, "data/raw/mimiciv/mimic_not_aggregated.csv")
 print("CSV Path:", csv_path)
 
 
 # %%
 # load data and preprocess
-data = CustomDataset(csv_path)
+variables = ["rr_value"]
+data = CustomDataset(csv_path, variables, aggregation_freq="30T", impute=True)
 data.load_data()
 data.preprocess_data()
 data.print_shapes()
@@ -52,28 +54,51 @@ lstm_at_model = LSTMModelWithAttention(
     input_size=1, hidden_size=50, num_layers=2, output_size=1
 ).to(device)
 
-criterion = nn.BCELoss()
+criterion = nn.BCELoss(reduction="mean")
 optimizer_lstm = torch.optim.Adam(lstm_model.parameters(), lr=0.001)
 optimizer_lstm_at = torch.optim.Adam(lstm_at_model.parameters(), lr=0.001)
 
 
 # training function
+
+
 def train_model(model, optimizer, train_loader, num_epochs=50):
     model.train()
+    losses = []
     for epoch in range(num_epochs):
-        print(f"Epoch {epoch + 1}")
+        epoch_loss = 0
         for X_batch, y_batch in train_loader:
             X_batch, y_batch = X_batch.to(device), y_batch.to(device)
             optimizer.zero_grad()
             outputs = model(X_batch)
-            loss = criterion(outputs, y_batch.unsqueeze(1))
+            if torch.isnan(outputs).any():
+                print("NaN values found in outputs during training")
+            loss = criterion(outputs, y_batch.unsqueeze(1)) + 1e-07
+            if torch.isnan(loss).any():
+                print("NaN values found in loss during training")
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
+            epoch_loss += loss.item()
+        average_epoch_loss = epoch_loss / len(train_loader)
+        losses.append(average_epoch_loss)
+        print(f"Epoch {epoch + 1}, Loss: {average_epoch_loss}")
+    return losses
 
 
 # train models
-train_model(lstm_model, optimizer_lstm, train_loader)
-train_model(lstm_at_model, optimizer_lstm_at, train_loader)
+losses_lstm = train_model(lstm_model, optimizer_lstm, train_loader)
+losses_lstmat = train_model(lstm_at_model, optimizer_lstm_at, train_loader)
+
+# plot losses
+plt.figure(figsize=(10, 5))
+plt.plot(losses_lstm, label="LSTM")
+plt.plot(losses_lstmat, label="LSTM with Attention")
+plt.title("Model training loss")
+plt.ylabel("Loss")
+plt.xlabel("Epoch")
+plt.legend()
+plt.show()
 
 
 # evaluation function
@@ -85,7 +110,11 @@ def evaluate_model(model, test_loader):
         for X_batch, y_batch in test_loader:
             X_batch, y_batch = X_batch.to(device), y_batch.to(device)
             outputs = model(X_batch)
+            if torch.isnan(outputs).any():
+                print("NaN values found in outputs")
             predictions = outputs.round()
+            if torch.isnan(predictions).any():
+                print("NaN values found in predictions")
             all_labels.extend(y_batch.cpu().numpy())
             all_predictions.extend(predictions.cpu().numpy())
     accuracy = accuracy_score(all_labels, all_predictions)
@@ -99,6 +128,7 @@ def evaluate_model(model, test_loader):
 accuracy_lstm, precision_lstm, recall_lstm, roc_auc_lstm = evaluate_model(
     lstm_model, test_loader
 )
+
 accuracy_lstm_at, precision_lstm_at, recall_lstm_at, roc_auc_lstm_at = evaluate_model(
     lstm_at_model, test_loader
 )
@@ -109,3 +139,5 @@ print(
 print(
     f"LSTM-AT - Accuracy: {accuracy_lstm_at:.4f}, Precision: {precision_lstm_at:.4f}, Recall: {recall_lstm_at:.4f}, ROC AUC: {roc_auc_lstm_at:.4f}"
 )
+
+# %%

@@ -1,72 +1,161 @@
+import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-import random
 
 
 class DataExplorer:
     def __init__(self, dataset):
         self.dataset = dataset
-        if self.dataset.data is None:
-            self.dataset.load_data()
+        self.data = dataset.data
+        self.variables = dataset.variables
+        self.pivoted_data = dataset.pivoted_data
+        self.mortality_data = self.data.drop_duplicates(subset=["stay_id"]).set_index(
+            "stay_id"
+        )["mortality"]
 
-    def exploratory_data_analysis(self):
-        """Perform exploratory data analysis to show the distribution of mortality."""
-        mortality_counts = self.dataset.data.drop_duplicates(subset=["stay_id"])[
-            "mortality"
-        ].value_counts()
+    def nan_summary(self):
+        summary = {}
+        for var in self.variables:
+            pivoted_var = self.pivoted_data[var]
+            nan_counts = pivoted_var.isna().sum()
+            nan_summary = nan_counts[nan_counts > 0]
+            summary[var] = nan_summary
+            print(f"NaN Summary for {var}:\n{nan_summary}\n")
+        return summary
 
-        plt.figure(figsize=(8, 6))
-        sns.barplot(
-            x=mortality_counts.index, y=mortality_counts.values, palette="viridis"
-        )
-        plt.title("Distribution of Mortality")
-        plt.xlabel("Mortality (0: Not Died, 1: Died)")
-        plt.ylabel("Count")
-        plt.show()
+    def plot_nan_heatmap(self):
+        for var in self.variables:
+            plt.figure(figsize=(12, 6))
+            sns.heatmap(self.pivoted_data[var].isna(), cbar=False, cmap="viridis")
+            plt.title(f"NaN Heatmap for {var}")
+            plt.xlabel("Time Step")
+            plt.ylabel("Patient ID")
+            plt.show()
 
-        # Distribution of respiratory rates
-        plt.figure(figsize=(10, 6))
-        sns.histplot(self.dataset.data["rr_mean"], bins=30, kde=True)
-        plt.title("Distribution of Respiratory Rates")
-        plt.xlabel("Respiratory Rate")
-        plt.ylabel("Frequency")
-        plt.show()
+    def plot_nan_distribution(self):
+        for var in self.variables:
+            mortality_0 = self.mortality_data == 0
+            mortality_1 = self.mortality_data == 1
 
-        # Mortality rate over time
-        self.dataset.data["hour"] = self.dataset.data["hour"].astype(int)
-        hourly_mortality = self.dataset.data.groupby("hour")["mortality"].mean()
+            nan_counts_per_time_step_0 = (
+                self.pivoted_data[var][mortality_0].isna().sum(axis=0)
+                / mortality_0.sum()
+            )
+            nan_counts_per_time_step_1 = (
+                self.pivoted_data[var][mortality_1].isna().sum(axis=0)
+                / mortality_1.sum()
+            )
 
-        plt.figure(figsize=(10, 6))
-        sns.lineplot(x=hourly_mortality.index, y=hourly_mortality.values)
-        plt.title("Mortality Rate Over Time (First 24 Hours)")
-        plt.xlabel("Hour")
-        plt.ylabel("Mortality Rate")
-        plt.show()
+            plt.figure(figsize=(12, 6))
+            sns.lineplot(
+                x=nan_counts_per_time_step_0.index,
+                y=nan_counts_per_time_step_0.values,
+                marker="o",
+                label="Mortality = 0",
+            )
+            sns.lineplot(
+                x=nan_counts_per_time_step_1.index,
+                y=nan_counts_per_time_step_1.values,
+                marker="o",
+                label="Mortality = 1",
+            )
 
-        # Box plot of respiratory rate by mortality status
-        plt.figure(figsize=(10, 6))
-        sns.boxplot(
-            x="mortality", y="rr_mean", data=self.dataset.data, palette="viridis"
-        )
-        plt.title("Respiratory Rate by Mortality Status")
-        plt.xlabel("Mortality (0: Not Died, 1: Died)")
-        plt.ylabel("Respiratory Rate")
-        plt.show()
+            plt.title(
+                f"Distribution of NaN Values for {var} (Normalized by Group Size)"
+            )
+            plt.xlabel("Time Step")
+            plt.ylabel("Proportion of NaNs")
+            plt.grid(True)
+            plt.legend()
+            plt.show()
 
-    def plot_patient_chart(self, stay_id=None):
-        """Plot the respiratory rate chart for a specific patient or a random patient if stay_id is not provided."""
-        if stay_id is None:
-            stay_id = random.choice(self.dataset.data["stay_id"].unique())
+    def plot_nan_distribution_by_mortality(self):
+        for var in self.variables:
+            nan_counts = self.pivoted_data[var].isna().sum(axis=1)
+            data_with_mortality = pd.DataFrame(
+                {"nan_counts": nan_counts, "mortality": self.mortality_data}
+            )
 
-        patient_data = self.dataset.data[self.dataset.data["stay_id"] == stay_id]
-        if patient_data.empty:
-            print(f"No data found for stay_id: {stay_id}")
-            return
+            plt.figure(figsize=(12, 6))
+            sns.boxplot(x="mortality", y="nan_counts", data=data_with_mortality)
+            plt.title(f"NaN Counts by Mortality for {var}")
+            plt.xlabel("Mortality")
+            plt.ylabel("Number of NaNs")
+            plt.show()
 
-        plt.figure(figsize=(12, 6))
-        plt.plot(patient_data["hour"], patient_data["rr_mean"], marker="o")
-        plt.title(f"Respiratory Rate Chart for Patient with stay_id: {stay_id}")
-        plt.xlabel("Hour")
-        plt.ylabel("Respiratory Rate")
-        plt.grid(True)
-        plt.show()
+            median_nan_counts = data_with_mortality.groupby("mortality")[
+                "nan_counts"
+            ].median()
+            print(f"Median NaN Counts for {var} by Mortality:\n{median_nan_counts}\n")
+
+    def statistical_summary(self):
+        summaries = {}
+        for var in self.variables:
+            summary = self.pivoted_data[var].describe()
+            summaries[var] = summary
+            print(f"Statistical Summary for {var}:\n{summary}\n")
+        return summaries
+
+    def plot_time_series(self, num_patients=5):
+        for var in self.variables:
+            plt.figure(figsize=(12, 6))
+            sample_patients = self.pivoted_data[var].sample(
+                num_patients, random_state=1
+            )
+            for idx, patient_data in sample_patients.iterrows():
+                plt.plot(patient_data.values, label=f"Patient {idx}")
+            plt.title(f"Time Series Plot for {var} (Sample of {num_patients} Patients)")
+            plt.xlabel("Time Step")
+            plt.ylabel(var)
+            plt.legend()
+            plt.show()
+
+    def plot_histograms(self):
+        for var in self.variables:
+            plt.figure(figsize=(12, 6))
+            self.pivoted_data[var].stack().hist(bins=50)
+            plt.title(f"Histogram of {var}")
+            plt.xlabel(var)
+            plt.ylabel("Frequency")
+            plt.show()
+
+    def measurement_frequency_analysis(self):
+        freq_summary = {}
+        for var in self.variables:
+            measurement_counts = self.pivoted_data[var].notna().sum(axis=1)
+            mortality_by_freq = measurement_counts.groupby(self.mortality_data).mean()
+            freq_summary[var] = mortality_by_freq
+            plt.figure(figsize=(12, 6))
+            sns.boxplot(x=self.mortality_data, y=measurement_counts)
+            plt.title(f"Measurement Frequency vs Mortality for {var}")
+            plt.xlabel("Mortality")
+            plt.ylabel("Measurement Frequency")
+            plt.show()
+            print(f"Measurement Frequency Summary for {var}:\n{mortality_by_freq}\n")
+        return freq_summary
+
+    def run_all(self):
+        print("NaN Summary:")
+        nan_summary = self.nan_summary()
+
+        print("\nNaN Heatmap:")
+        self.plot_nan_heatmap()
+
+        print("\nNaN Distribution:")
+        self.plot_nan_distribution()
+
+        print("\nNaN Distribution by Mortality:")
+        self.plot_nan_distribution_by_mortality()
+
+        print("\nStatistical Summary:")
+        stats_summary = self.statistical_summary()
+
+        print("\nTime Series Plots:")
+        self.plot_time_series()
+
+        print("\nHistograms:")
+        self.plot_histograms()
+
+        print("\nMeasurement Frequency Analysis:")
+        freq_analysis = self.measurement_frequency_analysis()
