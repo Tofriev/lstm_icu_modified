@@ -8,92 +8,118 @@ from torch.utils.data import Dataset
 
 
 class CustomDataset:
-    def __init__(self, filepath, variables, aggregation_freq=None, impute=False):
-        self.filepath = filepath
+    """
+    Custom dataset class for loading
+
+    Approach: load data for each varriable seperately, aggregate each seperatly and then merge them. Solvesthe problem of having a massive csv file due to different charttimes for each variable.
+    """
+
+    def __init__(self, filepaths, variables, aggregation_freq=None, impute=False):
+        self.filepaths = filepaths
         self.variables = variables
-        self.data = None
+        self.data = {}
         self.pivoted_data = None
         self.X = None
         self.y = None
         self.aggregation_freq = aggregation_freq
         self.impute = impute
+        self.primary_df = None
+        self.mortality = None
 
     def load_data(self):
+        self.primary_df = self._load_csv(
+            self.filepaths["respiratory_rate"], primary=True
+        )
+        self.mortality = self.primary_df[["stay_id", "mortality"]].drop_duplicates()
+        for var, filepath in self.filepaths.items():
+            if var != "respiratory_rate":
+                self.data[var] = self._load_csv(filepath, primary=False)
+
+    def _load_csv(self, filepath, primary=False):
         chunks = []
         chunk_size = 100000
-        for chunk in pd.read_csv(self.filepath, chunksize=chunk_size):
+        for chunk in pd.read_csv(filepath, chunksize=chunk_size):
             chunk["stay_id"] = chunk["stay_id"].astype(np.int32)
             chunk["charttime"] = pd.to_datetime(chunk["charttime"])
-            for var in self.variables:
-                chunk[var] = chunk[var].astype(np.float32)
-            chunk["mortality"] = chunk["mortality"].astype(np.int8)
+            if not primary:
+                chunk = chunk[
+                    chunk["stay_id"].isin(self.primary_df["stay_id"].unique())
+                ]  # in primary df we have the relevant subjects whi did not die in first 24h
             chunks.append(chunk)
-        self.data = pd.concat(chunks)
+        return pd.concat(chunks)
 
     def preprocess_data(self):
         self.load_data()
         if self.aggregation_freq:
             self.aggregate_data()
         self.make_time_indices()
+
+        # here the different DFs of each variable are merged
+        self.merge_data()
+
         self.pivot()
         if self.impute:
             self.imputer()
 
-        self.X = self.reshape()
+        self.X = self.reshape_to_3d_array()
         self.normalize()
 
-        # get mortality from original data
         self.y = (
-            self.data.drop_duplicates(subset=["stay_id"])
+            self.primary_df.drop_duplicates(subset=["stay_id"])
             .set_index("stay_id")["mortality"]
+            .reindex(self.pivoted_data[self.variables[0]].index)
             .values
         )
 
     def aggregate_data(self):
-        if self.aggregation_freq:
-            # mortality data is seperated
-            mortality_data = self.data[["stay_id", "mortality"]].drop_duplicates()
+        aggregated_data = []
+        for stay_id, group in self.primary_df.groupby("stay_id"):
+            group = group.set_index("charttime").resample(self.aggregation_freq).mean()
+            group["stay_id"] = stay_id
+            aggregated_data.append(group.reset_index())
+        self.primary_df = pd.concat(aggregated_data)
 
-            # charttimes are aggregated
+        for var, df in self.data.items():
             aggregated_data = []
-            for stay_id, group in self.data.groupby("stay_id"):
+            for stay_id, group in df.groupby("stay_id"):
                 group = (
                     group.set_index("charttime").resample(self.aggregation_freq).mean()
                 )
                 group["stay_id"] = stay_id
                 aggregated_data.append(group.reset_index())
-
-            self.data = pd.concat(aggregated_data)
-
-            # nortality is merged back
-            self.data = self.data.drop(columns="mortality", errors="ignore").merge(
-                mortality_data, on="stay_id", how="left"
-            )
-            print(
-                "Data aggregated:",
-                self.data.head(),
-            )
+            self.data[var] = pd.concat(aggregated_data)
 
     def make_time_indices(self):
-        data = self.data.copy()
-        data.sort_values(by=["stay_id", "charttime"], inplace=True)
-        data["adjusted_time"] = data.groupby("stay_id").cumcount()
-        data["adjusted_time"] = data["adjusted_time"].astype(np.int32)
-        self.data = data
-        print("Data time indices", self.data.head())
+        self.primary_df.sort_values(by=["stay_id", "charttime"], inplace=True)
+        self.primary_df["time_index"] = self.primary_df.groupby("stay_id").cumcount()
+        self.primary_df["time_index"] = self.primary_df["time_index"].astype(np.int32)
+
+        for var, df in self.data.items():
+            df.sort_values(by=["stay_id", "charttime"], inplace=True)
+            df["time_index"] = df.groupby("stay_id").cumcount()
+            df["time_index"] = df["time_index"].astype(np.int32)
+
+    def merge_data(self):
+        merged_data = self.primary_df.copy()
+        for var, df in self.data.items():
+            merged_data = pd.merge(
+                merged_data, df, on=["stay_id", "time_index"], suffixes=("", f"_{var}")
+            )
+        self.data = merged_data
 
     def pivot(self):
         data = self.data.copy()
         pivoted_data = {}  # store each var in dict entry
         for var in self.variables:
             pivoted_data[var] = data.pivot(
-                index="stay_id", columns="adjusted_time", values=var
+                index="stay_id", columns="time_index", values=var
             )
         self.pivoted_data = pivoted_data
         print("Data pivoted:")
         for var in self.variables:
             print(f"{var}:")
             print(self.pivoted_data[var].head())
+        print("\n")
 
     def imputer(self):
         print("nans before imputation:")
@@ -102,7 +128,7 @@ class CustomDataset:
 
         for var in self.variables:
             data = self.pivoted_data[var].copy()
-            max_time_steps = self.data["adjusted_time"].max() + 1
+            max_time_steps = self.data["time_index"].max() + 1
             data = data.reindex(
                 columns=[i for i in range(max_time_steps)], fill_value=np.nan
             )
@@ -113,7 +139,7 @@ class CustomDataset:
         for var in self.variables:
             print(f"{var}: {self.pivoted_data[var].isna().sum().sum()}")
 
-    def reshape(self):
+    def reshape_to_3d_array(self):
         arrays = []
         for var in self.variables:
             arrays.append(self.pivoted_data[var].values)
@@ -121,7 +147,6 @@ class CustomDataset:
             arrays, axis=-1
         )  # (number_of_patients, sequence_length, number_of_variables)
         print("Data reshaped:")
-        print(X.head())
         print(X.shape)
         return X
 
@@ -132,9 +157,6 @@ class CustomDataset:
         for i in range(num_vars):
             X[:, :, i] = scaler.fit_transform(X[:, :, i])
         self.X = X
-        print("Data normalized:")
-        print(self.X.head())
-        print(self.X.shape)
 
     def get_data(self):
         if self.X is None or self.y is None:

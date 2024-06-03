@@ -19,14 +19,21 @@ from src.Models import LSTMModel
 from src.Models import LSTMModelWithAttention
 from src.DataExplorer import DataExplorer
 
-csv_path = os.path.join(project_root, "data/raw/mimiciv/mimic_not_aggregated.csv")
-print("CSV Path:", csv_path)
-
 
 # %%
 # load data and preprocess
-variables = ["rr_value"]
-data = CustomDataset(csv_path, variables, aggregation_freq="30T", impute=True)
+filepaths = {
+    "respiratory_rate": os.path.join(
+        project_root, "data/raw/mimiciv/resprate_mortality.csv"
+    ),
+    "heart_rate": os.path.join(project_root, "data/raw/mimiciv/hr.csv"),
+}
+
+
+variables = ["rr_value", "hr_value"]
+data = CustomDataset(
+    filepaths, variables, aggregation_freq="30T", impute=True
+)  # imputation with foreward fill
 data.load_data()
 data.preprocess_data()
 data.print_shapes()
@@ -41,18 +48,26 @@ device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 print("Device:", device)
 
 
-train_dataset = TensorDataset(X_train, y_train)
-test_dataset = TensorDataset(X_test, y_test)
+train_dataset = TensorDataset(
+    torch.tensor(X_train, dtype=torch.float32),
+    torch.tensor(y_train, dtype=torch.float32),
+)
+test_dataset = TensorDataset(
+    torch.tensor(X_test, dtype=torch.float32), torch.tensor(y_test, dtype=torch.float32)
+)
+
 
 train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
 test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
-# define models
-lstm_model = LSTMModel(input_size=1, hidden_size=50, num_layers=2, output_size=1).to(
+
+
+lstm_model = LSTMModel(input_size=2, hidden_size=50, num_layers=2, output_size=1).to(
     device
 )
 lstm_at_model = LSTMModelWithAttention(
-    input_size=1, hidden_size=50, num_layers=2, output_size=1
+    input_size=2, hidden_size=50, num_layers=2, output_size=1
 ).to(device)
+
 
 criterion = nn.BCELoss(reduction="mean")
 optimizer_lstm = torch.optim.Adam(lstm_model.parameters(), lr=0.001)
