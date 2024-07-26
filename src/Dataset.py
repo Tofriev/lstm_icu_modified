@@ -5,6 +5,7 @@ import numpy as np
 import torch
 from sklearn.preprocessing import MinMaxScaler
 from torch.utils.data import Dataset
+from imblearn.over_sampling import SMOTE
 
 
 class CustomDataset:
@@ -70,6 +71,8 @@ class CustomDataset:
             .reindex(self.pivoted_data[self.variables[0]].index)
             .values
         )
+
+        # self.apply_smote()
 
     def aggregate_data(self):
         aggregated_data = []
@@ -145,7 +148,7 @@ class CustomDataset:
             arrays.append(self.pivoted_data[var].values)
         X = np.stack(
             arrays, axis=-1
-        )  # (number_of_patients, sequence_length, number_of_variables)
+        )  # (number_of_patients, sequence_length/time seps, number_of_variable/features)
         print("Data reshaped:")
         print(X.shape)
         return X
@@ -157,6 +160,15 @@ class CustomDataset:
         for i in range(num_vars):
             X[:, :, i] = scaler.fit_transform(X[:, :, i])
         self.X = X
+
+    def apply_smote(self):
+        n_samples, n_timesteps, n_features = self.X.shape
+        X_reshaped = self.X.reshape(n_samples, -1)
+        smote = SMOTE()
+        X_resampled, y_resampled = smote.fit_resample(X_reshaped, self.y)
+
+        self.X = X_resampled.reshape(-1, n_timesteps, n_features)
+        self.y = y_resampled
 
     def get_data(self):
         if self.X is None or self.y is None:
