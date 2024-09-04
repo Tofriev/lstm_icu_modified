@@ -6,6 +6,7 @@ import torch
 from sklearn.preprocessing import MinMaxScaler
 from torch.utils.data import Dataset
 from imblearn.over_sampling import SMOTE
+from sklearn.model_selection import train_test_split
 
 
 class CustomDataset:
@@ -15,17 +16,16 @@ class CustomDataset:
     Approach: load data for each varriable seperately, aggregate each seperatly and then merge them. Solvesthe problem of having a massive csv file due to different charttimes for each variable.
     """
 
-    def __init__(self, filepaths, variables, aggregation_freq=None, impute=False):
+    def __init__(self, filepaths, variables, aggregation_freq=None, impute=False, small_data = False):
         self.filepaths = filepaths
         self.variables = variables
         self.data = {}
-        self.pivoted_data = None
-        self.X = None
-        self.y = None
+        self.sequences = []
         self.aggregation_freq = aggregation_freq
         self.impute = impute
         self.primary_df = None
         self.mortality = None
+        self.small_data = small_data
 
     def load_data(self):
         self.primary_df = self._load_csv(
@@ -35,7 +35,10 @@ class CustomDataset:
         for var, filepath in self.filepaths.items():
             if var != "respiratory_rate":
                 self.data[var] = self._load_csv(filepath, primary=False)
-
+        print(self.mortality)
+        #print(self.data)
+        
+        
     def _load_csv(self, filepath, primary=False):
         chunks = []
         chunk_size = 100000
@@ -54,23 +57,14 @@ class CustomDataset:
         if self.aggregation_freq:
             self.aggregate_data()
         self.make_time_indices()
-
         # here the different DFs of each variable are merged
         self.merge_data()
-
         self.pivot()
         if self.impute:
             self.imputer()
+        self.create_sequences()
+        self.normalize_sequences()
 
-        self.X = self.reshape_to_3d_array()
-        self.normalize()
-
-        self.y = (
-            self.primary_df.drop_duplicates(subset=["stay_id"])
-            .set_index("stay_id")["mortality"]
-            .reindex(self.pivoted_data[self.variables[0]].index)
-            .values
-        )
 
         # self.apply_smote()
 
@@ -142,6 +136,33 @@ class CustomDataset:
         for var in self.variables:
             print(f"{var}: {self.pivoted_data[var].isna().sum().sum()}")
 
+
+    def create_sequences(self):
+        for stay_id, group in self.primary_df.groupby("stay_id"):
+            skip=False
+            sequence_features = []
+            for var in self.variables:
+                if stay_id in self.pivoted_data[var].index:
+                    sequence_features.append(self.pivoted_data[var].loc[stay_id].values)
+                else:
+                    skip=True
+            if not skip:
+                sequence_features = np.stack(sequence_features, axis=-1)
+                label = self.mortality[self.mortality["stay_id"] == stay_id].iloc[0].mortality
+                self.sequences.append((sequence_features, label))
+            else: 
+                print(f"Stay id {stay_id} not in pivoted data")
+        print(f"N sequences: {len(self.sequences)}, shape: {self.sequences[0][0].shape}")
+        print(self.sequences[0:100])
+
+    def normalize_sequences(self):
+        for i in range(len(self.sequences)):
+            sequence, label = self.sequences[i]
+            scaler = MinMaxScaler(feature_range=(0, 1))
+            for j in range(sequence.shape[-1]):
+                sequence[:, j] = scaler.fit_transform(sequence[:, j].reshape(-1, 1)).flatten()
+            self.sequences[i] = (sequence, label)
+
     def reshape_to_3d_array(self):
         arrays = []
         for var in self.variables:
@@ -171,26 +192,44 @@ class CustomDataset:
         self.y = y_resampled
 
     def get_data(self):
-        if self.X is None or self.y is None:
-            self.preprocess_data()
-        return self.X, self.y
+        return self.sequences
 
-    def print_shapes(self):
-        if self.X is None or self.y is None:
-            self.preprocess_data()
-        print(
-            "X shape:", self.X.shape
-        )  # (number_of_patients, sequence_length, number_of_variables)
-        print("y shape:", self.y.shape)  # (number_of_patients,)
+    # def get_data(self):
+    #     if self.X is None or self.y is None:
+    #         self.preprocess_data()
+
+    #     if self.small_data:
+    #         n_samples, n_timesteps, n_features = self.X.shape
+    #         X_reshaped = self.X.reshape(n_samples, -1)
+
+    #         X_reshaped, _, y, _ = train_test_split(
+    #             X_reshaped, self.y, test_size=0.9, stratify=self.y, random_state=42
+    #         )
+
+    #         self.X = X_reshaped.reshape(-1, n_timesteps, n_features)
+    #         self.y = y
+    #     return self.X, self.y
+
+    # def print_shapes(self):
+    #     if self.X is None or self.y is None:
+    #         self.preprocess_data()
+    #     print(
+    #         "X shape:", self.X.shape
+    #     )  # (number_of_patients, sequence_length, number_of_variables) (patient, )
+    #     print("y shape:", self.y.shape)  # (number_of_patients,)
 
 
 class TensorDataset(Dataset):
-    def __init__(self, X, y):
-        self.X = torch.tensor(X, dtype=torch.float32)
-        self.y = torch.tensor(y, dtype=torch.float32)
+    def __init__(self, sequences):
+        self.sequences = sequences
 
     def __len__(self):
-        return len(self.X)
+        return len(self.sequences)
 
     def __getitem__(self, idx):
-        return self.X[idx], self.y[idx]
+        sequence, label = self.sequences[idx]
+        return dict(
+            sequence=torch.tensor(sequence, dtype=torch.float32),
+            label=torch.tensor(label).long(),
+        )
+        

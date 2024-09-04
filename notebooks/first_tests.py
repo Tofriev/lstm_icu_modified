@@ -51,15 +51,34 @@ data = CustomDataset(
     variables,
     aggregation_freq="1H",  # T for minutes, H for hour
     impute=True,
+    small_data=True,
 )  # imputation with foreward fill
 data.load_data()
 data.preprocess_data()
-data.print_shapes()
+#data.print_shapes()
 
+
+# %%
 X, y = data.get_data()
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.2, random_state=42
 )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 # %%
@@ -67,42 +86,6 @@ X_train, X_test, y_train, y_test = train_test_split(
 device = (
     torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
 )
-
-
-class CNN_LSTM(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, num_classes):
-        super(CNN_LSTM, self).__init__()
-        self.cnn = nn.Sequential(
-            nn.Conv1d(
-                in_channels=input_size,
-                out_channels=64,
-                kernel_size=3,
-                stride=1,
-                padding=1,
-            ),
-            nn.ReLU(),
-            nn.MaxPool1d(kernel_size=2, stride=2),
-            nn.Conv1d(
-                in_channels=64, out_channels=128, kernel_size=3, stride=1, padding=1
-            ),
-            nn.ReLU(),
-            nn.MaxPool1d(kernel_size=2, stride=2),
-        )
-        self.lstm = nn.LSTM(
-            input_size=128,
-            hidden_size=hidden_size,
-            num_layers=num_layers,
-            batch_first=True,
-        )
-        self.fc = nn.Linear(hidden_size, num_classes)
-
-    def forward(self, x):
-        x = x.permute(0, 2, 1)
-        out = self.cnn(x)
-        out = out.permute(0, 2, 1)
-        out, _ = self.lstm(out)
-        out = self.fc(out[:, -1, :])
-        return out
 
 
 # fot DataLoader
