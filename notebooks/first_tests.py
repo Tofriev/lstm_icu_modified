@@ -37,6 +37,21 @@ filepaths = {
 }
 
 
+df = pd.read_csv(filepaths["respiratory_rate"])
+df_extract = df[['stay_id', 'mortality']].drop_duplicates()
+df_extract.to_csv(os.path.join(project_root, "data/raw/mimiciv/mortality.csv"), index=False)
+
+
+         
+#%%
+stay_id_mortality_combination = df_extract.groupby('stay_id')['mortality'].nunique()
+
+# Filtering to see if any stay_id has more than one unique mortality value
+multiple_mortality = stay_id_mortality_combination[stay_id_mortality_combination > 1]
+
+print(multiple_mortality)
+
+#%%
 variables = [
     "rr_value",
     "hr_value",

@@ -69,10 +69,26 @@ for series_id, group in X_train.groupby('series_id'):
     sequences.append((sequences_features, label))
 
 sequences[0]
+
+
+
+
+
+
+
+
+
+# %%[
+sequences[0][1]
 # %%
 train_seq, test_seq = train_test_split(sequences, test_size=0.2)
 len(train_seq), len(test_seq)
 
+
+#%%
+sequence,label = train_seq[0]
+print(dict(sequence=torch.tensor(sequence.to_numpy(), dtype=torch.float32),
+            label=torch.tensor(label).long()))
 # %%
 # Dataset 
 
