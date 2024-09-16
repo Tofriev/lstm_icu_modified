@@ -56,10 +56,15 @@ gcs = pd.read_csv(os.path.join(project_root, 'data/raw/mimiciv/gcs_total.csv'))
 glc = pd.read_csv(os.path.join(project_root, 'data/raw/mimiciv/glc.csv'))
 rr = pd.read_csv(os.path.join(project_root, 'data/raw/mimiciv/resprate_mortality.csv'))
 rr = rr.drop(columns=['mortality'])
+creatinine = pd.read_csv(os.path.join(project_root, 'data/raw/mimiciv/creatinine.csv'))
 X = pd.read_csv(os.path.join(project_root, 'data/raw/mimiciv/hr.csv'))
 
-# age and gender
-static = pd.read_csv(os.path.join(project_root, 'data/raw/mimiciv/static.csv'))
+# age, gender, height
+static = pd.read_csv(os.path.join(project_root, 'data/raw/mimiciv/static2.csv'))
+
+SEQUENCE_FEATURES = ['hr_value', 'mbp_value', 'rr_value', 'total_gcs', 'glc_value', 'creatinine_value']
+NUMERICAL_FEATURES = ['hr_value', 'mbp_value', 'rr_value', 'total_gcs', 'glc_value', 'age', 'height', 'creatinine_value']
+ALL_FEATURES = ['hr_value', 'mbp_value', 'glc_value', 'rr_value', 'total_gcs', 'age', 'gender', 'height', 'creatinine_value']
 
 
 # only use intersecting stay_ids
@@ -69,6 +74,9 @@ mbp = mbp[mbp['stay_id'].isin(y['stay_id'])]
 gcs = gcs[gcs['stay_id'].isin(y['stay_id'])]
 rr = rr[rr['stay_id'].isin(y['stay_id'])]
 glc = glc[glc['stay_id'].isin(y['stay_id'])]
+creatinine = creatinine[creatinine['stay_id'].isin(y['stay_id'])]
+static = static[static['stay_id'].isin(y['stay_id'])]
+static['gender'] = static['gender'].apply(lambda x: 1 if x == 'F' else 0)
 
 # floor charttime
 X['charttime'] = pd.to_datetime(X['charttime']).dt.floor('H')
@@ -76,12 +84,16 @@ mbp['charttime'] = pd.to_datetime(mbp['charttime']).dt.floor('H')
 gcs['charttime'] = pd.to_datetime(gcs['charttime']).dt.floor('H')
 rr['charttime'] = pd.to_datetime(rr['charttime']).dt.floor('H')
 glc['charttime'] = pd.to_datetime(glc['charttime']).dt.floor('H')
+creatinine['charttime'] = pd.to_datetime(creatinine['charttime']).dt.floor('H')
 
 # merge with X
-X = pd.merge(X, mbp, on=['stay_id', 'charttime'], how='inner')
-X = pd.merge(X, gcs, on=['stay_id', 'charttime'], how='inner')
-X = pd.merge(X, rr, on=['stay_id', 'charttime'], how='inner')
-X = pd.merge(X, glc, on=['stay_id', 'charttime'], how='inner')
+X = pd.merge(X, mbp, on=['stay_id', 'charttime'], how='left')
+X = pd.merge(X, gcs, on=['stay_id', 'charttime'], how='left')
+X = pd.merge(X, rr, on=['stay_id', 'charttime'], how='left')
+X = pd.merge(X, glc, on=['stay_id', 'charttime'], how='left')
+X = pd.merge(X, creatinine, on=['stay_id', 'charttime'], how='left')
+print(X.isna().sum())
+print(len(X))
 
 
 # only use 50% of the data if preferred 
@@ -122,6 +134,7 @@ def time_index(group):
         'total_gcs': 'mean',  
         'rr_value': 'mean',
         'glc_value': 'mean',
+        'creatinine_value': 'mean'
     })
     
     group = group.sort_values('charttime').reset_index(drop=True)
@@ -143,18 +156,28 @@ def time_index(group):
 X_timed= X_undersampled.groupby('stay_id').apply(time_index).reset_index(drop=True)
 X_timed = X_timed.sort_values(['stay_id', 'charttime'])
 X_timed = X_timed.drop(columns=['charttime'])
+
+
 print(X_timed.head(10))
 
 # impute 
 X_timed_imputed = X_timed.copy()
 X_timed_imputed = X_timed_imputed.ffill()
+X_timed_imputed = X_timed_imputed.bfill()
+X_timed_imputed = X_timed_imputed.fillna(0)
 print('naaaaans')
 print(X_timed_imputed.isna().sum())
+static['height'].fillna(static['height'].mean(), inplace=True)
+X_timed_imputed = pd.merge(X_timed_imputed, static[['stay_id', 'age', 'gender', 'height']], on='stay_id', how='left')
+
+X_timed_imputed = X_timed_imputed.dropna(subset=['age', 'gender', 'height'])
+
+
 
 
 # normalization 
 scaler = StandardScaler()
-X_timed_imputed[['hr_value', 'mbp_value', 'rr_value', 'total_gcs']] = scaler.fit_transform(X_timed_imputed[['hr_value', 'mbp_value', 'rr_value',  'total_gcs']])
+X_timed_imputed[NUMERICAL_FEATURES] = scaler.fit_transform(X_timed_imputed[NUMERICAL_FEATURES])
 
 
 print(X_timed_imputed.head(10))
@@ -163,7 +186,7 @@ print(X_timed_imputed.describe())
 # %%
 sequences = []
 for stay_id, group in X_timed_imputed.groupby('stay_id'):
-    features = group[['hr_value', 'mbp_value', 'rr_value', 'total_gcs']]
+    features = group[ALL_FEATURES]
     label = y_undersampled[y_undersampled['stay_id'] == stay_id].iloc[0].mortality
     sequences.append((features, label))
 
@@ -346,7 +369,7 @@ class MortalityPredictor(pl.LightningModule):
 
 
 model = MortalityPredictor(
-    n_features=4, 
+    n_features=len(ALL_FEATURES), 
     n_classes=2,
     )
 
