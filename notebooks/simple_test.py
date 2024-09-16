@@ -50,13 +50,16 @@ device = (
     torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
 )  
 
-y = pd.read_csv(os.path.join(project_root, 'data/raw/mimiciv/mortality.csv'))
+y = pd.read_csv(os.path.join(project_root, 'data/raw/mimiciv/mort2.csv'))
 mbp = pd.read_csv(os.path.join(project_root, 'data/raw/mimiciv/mbp.csv'))
 gcs = pd.read_csv(os.path.join(project_root, 'data/raw/mimiciv/gcs_total.csv'))
 glc = pd.read_csv(os.path.join(project_root, 'data/raw/mimiciv/glc.csv'))
 rr = pd.read_csv(os.path.join(project_root, 'data/raw/mimiciv/resprate_mortality.csv'))
 rr = rr.drop(columns=['mortality'])
 X = pd.read_csv(os.path.join(project_root, 'data/raw/mimiciv/hr.csv'))
+
+# age and gender
+static = pd.read_csv(os.path.join(project_root, 'data/raw/mimiciv/static.csv'))
 
 
 # only use intersecting stay_ids
@@ -75,10 +78,10 @@ rr['charttime'] = pd.to_datetime(rr['charttime']).dt.floor('H')
 glc['charttime'] = pd.to_datetime(glc['charttime']).dt.floor('H')
 
 # merge with X
-X = pd.merge(X, mbp, on=['stay_id', 'charttime'], how='left')
-X = pd.merge(X, gcs, on=['stay_id', 'charttime'], how='left')
-X = pd.merge(X, rr, on=['stay_id', 'charttime'], how='left')
-X = pd.merge(X, glc, on=['stay_id', 'charttime'], how='left')
+X = pd.merge(X, mbp, on=['stay_id', 'charttime'], how='inner')
+X = pd.merge(X, gcs, on=['stay_id', 'charttime'], how='inner')
+X = pd.merge(X, rr, on=['stay_id', 'charttime'], how='inner')
+X = pd.merge(X, glc, on=['stay_id', 'charttime'], how='inner')
 
 
 # only use 50% of the data if preferred 
