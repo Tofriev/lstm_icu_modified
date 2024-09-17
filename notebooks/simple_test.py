@@ -57,136 +57,138 @@ glc = pd.read_csv(os.path.join(project_root, 'data/raw/mimiciv/glc.csv'))
 rr = pd.read_csv(os.path.join(project_root, 'data/raw/mimiciv/resprate_mortality.csv'))
 rr = rr.drop(columns=['mortality'])
 creatinine = pd.read_csv(os.path.join(project_root, 'data/raw/mimiciv/creatinine.csv'))
-X = pd.read_csv(os.path.join(project_root, 'data/raw/mimiciv/hr.csv'))
-
-# age, gender, height
-static = pd.read_csv(os.path.join(project_root, 'data/raw/mimiciv/static2.csv'))
-
-SEQUENCE_FEATURES = ['hr_value', 'mbp_value', 'rr_value', 'total_gcs', 'glc_value', 'creatinine_value']
-NUMERICAL_FEATURES = ['hr_value', 'mbp_value', 'rr_value', 'total_gcs', 'glc_value', 'age', 'height', 'creatinine_value']
-ALL_FEATURES = ['hr_value', 'mbp_value', 'glc_value', 'rr_value', 'total_gcs', 'age', 'gender', 'height', 'creatinine_value']
-
-
-# only use intersecting stay_ids
-y = y[y['stay_id'].isin(X['stay_id'])]
-X = X[X['stay_id'].isin(y['stay_id'])]
-mbp = mbp[mbp['stay_id'].isin(y['stay_id'])]
-gcs = gcs[gcs['stay_id'].isin(y['stay_id'])]
-rr = rr[rr['stay_id'].isin(y['stay_id'])]
-glc = glc[glc['stay_id'].isin(y['stay_id'])]
-creatinine = creatinine[creatinine['stay_id'].isin(y['stay_id'])]
-static = static[static['stay_id'].isin(y['stay_id'])]
-static['gender'] = static['gender'].apply(lambda x: 1 if x == 'F' else 0)
-
-# floor charttime
-X['charttime'] = pd.to_datetime(X['charttime']).dt.floor('H')
-mbp['charttime'] = pd.to_datetime(mbp['charttime']).dt.floor('H')
-gcs['charttime'] = pd.to_datetime(gcs['charttime']).dt.floor('H')
-rr['charttime'] = pd.to_datetime(rr['charttime']).dt.floor('H')
-glc['charttime'] = pd.to_datetime(glc['charttime']).dt.floor('H')
-creatinine['charttime'] = pd.to_datetime(creatinine['charttime']).dt.floor('H')
-
-# merge with X
-X = pd.merge(X, mbp, on=['stay_id', 'charttime'], how='left')
-X = pd.merge(X, gcs, on=['stay_id', 'charttime'], how='left')
-X = pd.merge(X, rr, on=['stay_id', 'charttime'], how='left')
-X = pd.merge(X, glc, on=['stay_id', 'charttime'], how='left')
-X = pd.merge(X, creatinine, on=['stay_id', 'charttime'], how='left')
-print(X.isna().sum())
-print(len(X))
+potassium = pd.read_csv(os.path.join(project_root, 'data/raw/mimiciv/potassium.csv'))
+hr = pd.read_csv(os.path.join(project_root, 'data/raw/mimiciv/hr.csv'))
+sodium = pd.read_csv(os.path.join(project_root, 'data/raw/mimiciv/sodium.csv'))
+wbc = pd.read_csv(os.path.join(project_root, 'data/raw/mimiciv/wbc.csv')) # leukocytes
+platelets = pd.read_csv(os.path.join(project_root, 'data/raw/mimiciv/platelets.csv')) # thrombocyten
+inr = pd.read_csv(os.path.join(project_root, 'data/raw/mimiciv/inr.csv')) # Prothrombin Time (quick)
+anion_gap = pd.read_csv(os.path.join(project_root, 'data/raw/mimiciv/anion_gap.csv')) 
+lactate = pd.read_csv(os.path.join(project_root, 'data/raw/mimiciv/lactate.csv'))
+urea = pd.read_csv(os.path.join(project_root, 'data/raw/mimiciv/urea.csv')) 
+temperature = pd.read_csv(os.path.join(project_root, 'data/raw/mimiciv/temperature.csv')) 
+weight = pd.read_csv(os.path.join(project_root, 'data/raw/mimiciv/weights.csv'))
+# age, gender, height, timeframe
+static = pd.read_csv(os.path.join(project_root, 'data/raw/mimiciv/static3.csv'))
 
 
-# only use 50% of the data if preferred 
+SEQUENCE_FEATURES = [
+                    'hr_value'
+                     ,'mbp_value'
+                     ,'rr_value'
+                     ,'total_gcs'
+                     ,'glc_value'
+                     ,'creatinine_value'
+                     ,'potassium_value'
+                     ,'sodium_value'
+                     ,'wbc_value'
+                     ,'platelets_value'
+                     ,'inr_value'
+                     ,'anion_gap_value'
+                     ,'lactate_value'
+                     ,'urea_value'
+                     ,'temperature_value'
+                     ,'weight_value'
+                     ]
+NUMERICAL_FEATURES = SEQUENCE_FEATURES + ['age', 'height']
+CAT_FEATURES = ['gender']
+ALL_FEATURES = NUMERICAL_FEATURES + CAT_FEATURES
+# best results were archived with the following feature datasets
+# [mbp, gcs, glc, rr, creatinine, hr, potassium, sodium]
+# [mbp, gcs, glc, rr, creatinine, hr, potassium, sodium, wbc, platelets, inr, anion_gap, lactate]
+DATASETS = [mbp, gcs, glc, rr, creatinine, hr, potassium, sodium, wbc, platelets, inr, anion_gap, lactate, urea, temperature, weight]
+
+# use small amount of data for testing
+small = False
 y_small = train_test_split(y, test_size=0.9, stratify=y['mortality'])[0]
-X_small = X[X['stay_id'].isin(y_small['stay_id'])]
-print(f'shape y: {y.shape[0]}')
-print(f'shape y_small: {y_small.shape[0]}')
-print(f'shape X: {X.shape[0]}')
-print(f'shape X_small: {X_small.shape[0]}')
+if small == True:
+    for i in range(len(DATASETS)): 
+        DATASETS[i] = DATASETS[i][DATASETS[i]['stay_id'].isin(y_small['stay_id'])]
+    static = static[static['stay_id'].isin(y_small['stay_id'])]
+    y = y[y['stay_id'].isin(y_small['stay_id'])]
 
 
-y_final = y.copy()
-X_final = X.copy()
+# datetime format and aggregation
+aggregated_datasets = []
+for df in DATASETS:
+    df['charttime'] = pd.to_datetime(df['charttime']).dt.floor('H')
+    measurement_cols = df.columns.difference(['stay_id', 'charttime'])
+    df_agg = df.groupby(['stay_id', 'charttime'], as_index=False)[measurement_cols.tolist()].mean()
+    aggregated_datasets.append(df_agg)
+
+static['intime'] = pd.to_datetime(static['intime']).dt.floor('H')
+static['first_day_end'] = pd.to_datetime(static['first_day_end']).dt.floor('H')
+static['gender'] = static['gender'].map({'M': 0, 'F': 1})
+
+# create time grid for first 24h -> results in 25 rows due to flooring
+def create_time_grid(df):
+    df_list = []
+    for index, row in df.iterrows():
+        stay_id = row['stay_id']
+        start_time = row['intime']
+        end_time = row['first_day_end']
+        time_diff = end_time - start_time
+        time_range = pd.date_range(start=start_time, end=end_time, freq='H')
+        time_df = pd.DataFrame({'stay_id': stay_id, 'charttime': time_range})
+        df_list.append(time_df)
+    return pd.concat(df_list, ignore_index=True)
+
+time_grid = create_time_grid(static)
+
+# merge vars on time grid
+merged_df = time_grid.copy()
+for data in aggregated_datasets: 
+    merged_df = pd.merge(merged_df, data, on=['stay_id', 'charttime'], how='left')
+merged_df = pd.merge(merged_df, static[['stay_id', 'age', 'gender', 'height']], on='stay_id', how='left')
+X = merged_df.copy()
+
+print(X.columns)
+
+# impute 
+print(f'number of missing values: {X.isna().sum()}')
+X.sort_values(['stay_id', 'charttime'], inplace=True)
+X = X.groupby('stay_id').apply(lambda group: group.ffill().bfill()).reset_index(drop=True)
+global_means = X[NUMERICAL_FEATURES].mean()
+X[NUMERICAL_FEATURES] = X[NUMERICAL_FEATURES].fillna(global_means)
+
+X['height'].fillna(X['height'].mean(), inplace=True)
+X['age'].fillna(X['age'].mean(), inplace=True)
+X['gender'].fillna(X['gender'].mode()[0], inplace=True)
+print(f'number of missing values after imputation: {X.isna().sum()}')
 
 # undersample
 print('before undersampling: ')
-y_final.mortality.value_counts().plot(kind="bar")
+y.mortality.value_counts().plot(kind="bar")
 plt.show()
 undersampler = RandomUnderSampler(random_state=42, sampling_strategy=0.1)
-y_undersampled_stayids, _ = undersampler.fit_resample(y_final[['stay_id']], y_final['mortality'])
-y_undersampled = y_final[y_final['stay_id'].isin(y_undersampled_stayids['stay_id'])]
-X_undersampled = X_final[X_final['stay_id'].isin(y_undersampled['stay_id'])]
+y_undersampled_stayids, _ = undersampler.fit_resample(y[['stay_id']], y['mortality'])
+y_undersampled = y[y['stay_id'].isin(y_undersampled_stayids['stay_id'])]
+X_undersampled = X[X['stay_id'].isin(y_undersampled['stay_id'])]
 print('after undersampling: ')
 y_undersampled.mortality.value_counts().plot(kind="bar")
 plt.show()
-#%%
-# create time index
-X_undersampled['charttime'] = pd.to_datetime(X['charttime'])
 
-def time_index(group):
-    group['charttime'] = group['charttime'].dt.floor('H')
-    
-    # aggregate 
-    group = group.groupby('charttime', as_index=False).agg({
-        'stay_id': 'first',
-        'hr_value': 'mean',
-        'mbp_value': 'mean',  
-        'total_gcs': 'mean',  
-        'rr_value': 'mean',
-        'glc_value': 'mean',
-        'creatinine_value': 'mean'
-    })
-    
-    group = group.sort_values('charttime').reset_index(drop=True)
-    
-    # 24-hour range 
-    first_time = group['charttime'].iloc[0].floor('H')
-    full_range = pd.date_range(start=first_time, periods=24, freq='H') 
-    full_range_df = pd.DataFrame({'charttime': full_range})
-    
-    # merge  full range 
-    merged = pd.merge(full_range_df, group, how='left', on='charttime')
-    merged['stay_id'] = group['stay_id'].iloc[0]  # Ensure stay_id is filled
-    
-    merged['time'] = range(24)
-    
-    return merged
-
-
-X_timed= X_undersampled.groupby('stay_id').apply(time_index).reset_index(drop=True)
-X_timed = X_timed.sort_values(['stay_id', 'charttime'])
-X_timed = X_timed.drop(columns=['charttime'])
-
-
-print(X_timed.head(10))
-
-# impute 
-X_timed_imputed = X_timed.copy()
-X_timed_imputed = X_timed_imputed.ffill()
-X_timed_imputed = X_timed_imputed.bfill()
-X_timed_imputed = X_timed_imputed.fillna(0)
-print('naaaaans')
-print(X_timed_imputed.isna().sum())
-static['height'].fillna(static['height'].mean(), inplace=True)
-X_timed_imputed = pd.merge(X_timed_imputed, static[['stay_id', 'age', 'gender', 'height']], on='stay_id', how='left')
-
-X_timed_imputed = X_timed_imputed.dropna(subset=['age', 'gender', 'height'])
-
-
-
-
-# normalization 
+# scaling 
 scaler = StandardScaler()
-X_timed_imputed[NUMERICAL_FEATURES] = scaler.fit_transform(X_timed_imputed[NUMERICAL_FEATURES])
+X_undersampled[NUMERICAL_FEATURES] = scaler.fit_transform(X_undersampled[NUMERICAL_FEATURES])
 
+# check sequences
+stay_ids_with_missing_rows = []
+for stay_id, group in X_undersampled.groupby('stay_id'):
+    if len(group) != 25:        
+        stay_ids_with_missing_rows.append(stay_id)
 
-print(X_timed_imputed.head(10))
-print(X_timed_imputed.describe())
+if len(stay_ids_with_missing_rows) > 0:    
+    print("stayid with != 25 rows: ")    
+    print(stay_ids_with_missing_rows)
+else:
+    print("all stayids have 25 rows ")
 
-# %%
+#%%
 sequences = []
-for stay_id, group in X_timed_imputed.groupby('stay_id'):
-    features = group[ALL_FEATURES]
+for stay_id, group in X_undersampled.groupby('stay_id'):
+    group = group.sort_values('charttime')
+    features = group[ALL_FEATURES].values
     label = y_undersampled[y_undersampled['stay_id'] == stay_id].iloc[0].mortality
     sequences.append((features, label))
 
@@ -207,7 +209,7 @@ print(f'Positive labels in test: {len(plabels_test)/len(test_seq)}')
 #%%
 sequence,label= train_seq[0]
 print(dict(
-            sequence=torch.tensor(sequence.to_numpy(), dtype=torch.float32),
+            sequence=torch.tensor(sequence, dtype=torch.float32),
             label=torch.tensor(label).long(),
         ))
 
@@ -224,7 +226,7 @@ class IcuDataset(Dataset):
     def __getitem__(self, idx):
         sequence, label = self.sequences[idx]
         return dict(
-            sequence=torch.tensor(sequence.to_numpy(), dtype=torch.float32),
+            sequence=torch.tensor(sequence, dtype=torch.float32),
             label=torch.tensor(label).long(),
         )
 
@@ -266,7 +268,7 @@ class IcuDataModule(pl.LightningDataModule):
     
 
 # %%
-N_EPOCHS = 60
+N_EPOCHS = 15
 BATCH_SIZE = 32
 
 data_module = IcuDataModule(train_seq, test_seq, BATCH_SIZE)
@@ -288,7 +290,7 @@ class IcuModel(nn.Module):
         )
 
         #self.classifier = nn.Linear(n_hidden, n_classes)
-        # if bidirectional = True: 
+        # 'if bidirectional = True': 
         self.classifier = nn.Linear(2*n_hidden, n_classes)
 
     def forward(self, x):
@@ -365,9 +367,6 @@ class MortalityPredictor(pl.LightningModule):
     
 
 # %%
-
-
-
 model = MortalityPredictor(
     n_features=len(ALL_FEATURES), 
     n_classes=2,
@@ -377,7 +376,7 @@ checkpoint_callback = ModelCheckpoint(
     dirpath='checkpoints',
     filename='best-checkpoint',
     save_top_k=1,
-    verbose=True, 
+    verbose=True,
     monitor='val_loss',
     mode= 'min',
 )
