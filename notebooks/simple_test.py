@@ -75,18 +75,18 @@ static = pd.read_csv(os.path.join(project_root, 'data/raw/mimiciv/static3.csv'))
 SEQUENCE_FEATURES = [
                     'hr_value'
                      ,'mbp_value'
-                     ,'rr_value'
+                     #,'rr_value'
                      ,'total_gcs'
                      ,'glc_value'
                      ,'creatinine_value'
                      ,'potassium_value'
-                     ,'sodium_value'
+                    # ,'sodium_value'
                      ,'wbc_value'
                      ,'platelets_value'
                      ,'inr_value'
                      ,'anion_gap_value'
                      ,'lactate_value'
-                     ,'urea_value'
+                     #,'urea_value'
                      ,'temperature_value'
                      ,'weight_value'
                      ]
@@ -96,7 +96,7 @@ ALL_FEATURES = NUMERICAL_FEATURES + CAT_FEATURES
 # best results were archived with the following feature datasets
 # [mbp, gcs, glc, rr, creatinine, hr, potassium, sodium]
 # [mbp, gcs, glc, rr, creatinine, hr, potassium, sodium, wbc, platelets, inr, anion_gap, lactate]
-DATASETS = [mbp, gcs, glc, rr, creatinine, hr, potassium, sodium, wbc, platelets, inr, anion_gap, lactate, urea, temperature, weight]
+DATASETS = [mbp, gcs, glc, creatinine, hr, potassium, wbc, platelets, inr, anion_gap, lactate, temperature, weight]# urea, sodium, rr
 
 # use small amount of data for testing
 small = False
@@ -184,6 +184,7 @@ if len(stay_ids_with_missing_rows) > 0:
 else:
     print("all stayids have 25 rows ")
 
+print(X_undersampled.columns)
 #%%
 sequences = []
 for stay_id, group in X_undersampled.groupby('stay_id'):
@@ -268,7 +269,7 @@ class IcuDataModule(pl.LightningDataModule):
     
 
 # %%
-N_EPOCHS = 15
+N_EPOCHS = 3
 BATCH_SIZE = 32
 
 data_module = IcuDataModule(train_seq, test_seq, BATCH_SIZE)
@@ -396,5 +397,232 @@ trainer = pl.Trainer(
 trainer.fit(model, data_module)
 # %%
 trainer.test(model, datamodule=data_module)
+#%%%
 
+# %%
+
+#################################################
+####### Extract the TUDD data for testing #######
+#################################################
+
+measurements = pd.read_csv(os.path.join(project_root, 'data/raw/tudd/tudd_complete.csv'), sep='|')
+mortality_info_x = pd.read_csv(os.path.join(project_root, 'data/raw/tudd/stays_ane.csv'), sep='|')
+mortality_info_y = pd.read_csv(os.path.join(project_root, 'data/raw/tudd/stays_others2_ane.csv'), sep='|')
+
+mortality_info = pd.concat([mortality_info_x, mortality_info_y])
+
+measurements['measurement_offset'] = pd.to_numeric(measurements['measurement_offset'], errors='coerce')
+
+measurements = pd.merge(
+    measurements,
+    mortality_info[['caseid','stay_duration', 'age', 'gender', 'bodyheight', 'bodyweight', 'exitus']],
+    on='caseid',
+    how='left'
+)
+measurements['stay_duration_hours'] = measurements['stay_duration'] * 24
+measurements['measurement_time_from_admission'] = measurements['stay_duration_hours'] + measurements['measurement_offset']
+
+
+# clean negative values in measurement_time_from_admission as that indicates a measurement before admission
+# small negative values are allowed due to possible errors and capped to 0
+measurements = measurements[measurements['measurement_time_from_admission'] > -1]
+measurements.loc[measurements['measurement_time_from_admission'] <= -1, 'measurement_time_from_admission'] = 0
+
+# only keep first 24h
+measurements = measurements[(measurements['measurement_time_from_admission'] >= 0) &
+                            (measurements['measurement_time_from_admission'] <= 24)]
+
+# round down to hour
+measurements['measurement_time_from_admission'] = np.floor(measurements['measurement_time_from_admission'])
+
+
+# aggregate measurements 
+measurements['value'] = pd.to_numeric(measurements['value'], errors='coerce')
+measurements_agg = measurements.groupby(['caseid', 'measurement_time_from_admission', 'treatmentname'])['value'].mean().reset_index()
+
+# pivot treatmentnames to columns
+measurements_pivot = measurements_agg.pivot_table(
+    index=['caseid', 'measurement_time_from_admission'],
+    columns='treatmentname',
+    values='value'
+).reset_index()
+
+# time grid
+def create_time_grid(mortality_info):
+    df_list = []
+    for _, row in mortality_info.iterrows():
+        caseid = row['caseid']
+        time_range = np.arange(0, 25)  # hour 0 to 24 inclusive
+        time_df = pd.DataFrame({'caseid': caseid, 'measurement_time_from_admission': time_range})
+        df_list.append(time_df)
+    return pd.concat(df_list, ignore_index=True)
+
+time_grid = create_time_grid(mortality_info)
+
+# merge on time grid
+merged_df = pd.merge(time_grid, measurements_pivot, on=['caseid', 'measurement_time_from_admission'], how='left')
+merged_df = pd.merge(
+    merged_df,
+    mortality_info[['caseid', 'age', 'gender', 'bodyheight', 'bodyweight', 'exitus']],
+    on='caseid',
+    how='left'
+)
+
+# map treatmentnames
+treatmentnames_mapping = {
+    'HF': 'hr_value',
+    'AGAP': 'anion_gap_value',
+    'GLUC': 'glc_value',
+    'CREA': 'creatinine_value',
+    'K': 'potassium_value',
+    'LEU': 'wbc_value',
+    'THR': 'platelets_value',
+    'Q': 'inr_value',
+    'LAC': 'lactate_value',
+    'T': 'temperature_value',
+    'GCS': 'total_gcs',
+    'MAP': 'mbp_value',
+    'bodyweight': 'weight_value',
+    'bodyheight': 'height_value'
+}
+cols_to_rename = {old_name: treatmentnames_mapping.get(old_name, old_name) for old_name in merged_df.columns}
+merged_df.rename(columns=cols_to_rename, inplace=True)
+
+
+#%%
+SEQUENCE_FEATURES = [
+    'hr_value',
+    'mbp_value',
+    'total_gcs',
+    'glc_value',
+    'creatinine_value',
+    'potassium_value',
+    'wbc_value',
+    'platelets_value',
+    'inr_value',
+    'anion_gap_value',
+    'lactate_value',
+    'temperature_value',
+    'weight_value'
+]
+
+NUMERICAL_FEATURES = SEQUENCE_FEATURES + ['age', 'height_value']
+CAT_FEATURES = ['gender']
+ALL_FEATURES = NUMERICAL_FEATURES + CAT_FEATURES
+
+# drop 'ALAT', 'ALB', 'ASAT', 'BR', 'BRc', 'CRP', 'FIO2', 'GFR', 'HB',
+#  'HCO3', 'HFF', 'PACO2', 'PAO2', 'PCT', 'PFR', 'PH', 'Q', 'RASS', 'RF', 'TROPT'
+merged_df.drop(['ALAT', 'ALB', 'ASAT', 'BR', 'BRc', 'CRP', 'FIO2', 'GFR', 'HB',
+                'HCO3', 'HFF', 'PACO2', 'PAO2', 'PCT', 'PFR', 'PH', 'RASS', 'RF', 'TROPT'], axis=1, inplace=True)
+#%%
+# define bnoundaries
+bounds = {
+    'age': (18, 90),
+    'weight_value': (20, 500),
+    'height_value': (20, 260),
+    'temperature_value': (20, 45),
+    'hr_value': (10, 300),  
+    'glc_value': (5, 2000),  
+    'mbp_value': (20, 400),  
+    'potassium_value': (2.5, 7),
+    'wbc_value': (1, 200),  
+    'platelets_value': (10, 1000),  
+    'inr_value': (0.2, 6),  
+    'anion_gap_value': (1, 25),
+    'lactate_value': (0.1, 200),
+    'creatinine_value': (0.1, 20)
+}
+
+# drop observbation for age < 18, set to 90 if > 90
+merged_df = merged_df[merged_df['age'] >= 18] 
+merged_df['age'] = merged_df['age'].apply(lambda x: min(x, 90))
+
+for feature, (lower, upper) in bounds.items():
+    if feature in merged_df.columns:
+        merged_df.loc[merged_df[feature] < lower, feature] = np.nan
+        merged_df.loc[merged_df[feature] > upper, feature] = np.nan
+
+
+# impute ffill and bfill and mean 
+merged_df.sort_values(['caseid', 'measurement_time_from_admission'], inplace=True)
+merged_df = merged_df.groupby('caseid').apply(lambda group: group.ffill().bfill()).reset_index(drop=True)
+
+global_means = merged_df[NUMERICAL_FEATURES].mean()
+merged_df[NUMERICAL_FEATURES] = merged_df[NUMERICAL_FEATURES].fillna(global_means)
+
+merged_df['gender'] = merged_df['gender'].map({'m': 0, 'w': 1})
+merged_df['gender'].fillna(merged_df['gender'].mode()[0], inplace=True)
+
+merged_df['exitus'].fillna(0, inplace=True)
+print(merged_df.head(50))
+# scaling
+# zero or near-zero variance features
+variance_threshold = 1e-8
+feature_variances = merged_df[NUMERICAL_FEATURES].var()
+zero_variance_features = feature_variances[feature_variances < variance_threshold].index.tolist()
+print("Zero or near-zero variance features:", zero_variance_features)
+
+
+unique_counts = merged_df[NUMERICAL_FEATURES].nunique()
+constant_features = unique_counts[unique_counts == 1].index.tolist()
+print("Constant features:", constant_features)
+
+
+NUMERICAL_FEATURES = [feature for feature in NUMERICAL_FEATURES if feature not in zero_variance_features]
+
+
+scaler = StandardScaler()
+merged_df[NUMERICAL_FEATURES] = scaler.fit_transform(merged_df[NUMERICAL_FEATURES])
+print(merged_df.head(50))
+print(merged_df.columns)
+column_order = [
+    'caseid', 'measurement_time_from_admission','mbp_value', 'total_gcs', 'glc_value', 'creatinine_value', 'hr_value', 
+    'potassium_value', 'wbc_value', 'platelets_value', 'inr_value', 
+    'anion_gap_value', 'lactate_value', 'temperature_value', 'weight_value', 
+    'age', 'gender', 'height_value', 'exitus'
+]
+sorted_merged_df = merged_df[column_order]
+print(sorted_merged_df.columns)
+
+# checking data
+sequences = []
+invalid_caseids = []
+
+for caseid, group in sorted_merged_df.groupby('caseid'):
+    if len(group) != 25:
+        invalid_caseids.append(caseid)
+        print(f'caseid {caseid} has {len(group)} rows')
+    else:
+        group = group.sort_values('measurement_time_from_admission')
+        features = group[ALL_FEATURES].values
+        label = group['exitus'].iloc[0]  
+        sequences.append((features, label))
+
+if not invalid_caseids:
+    print("All caseids have 25 rows.")
+
+labels = [seq[1] for seq in sequences]
+
+
+train_seq, test_seq = train_test_split(sequences, test_size=0.2, stratify=labels, random_state=42)
+print(f'Training sequences: {len(train_seq)}, Test sequences: {len(test_seq)}')
+
+# %%
+labels = [seq[1] for seq in sequences]    # Labels (mortality)
+
+
+tudd_train_seq, tudd_test_seq = train_test_split(sequences, test_size=0.2, stratify=labels, random_state=42)
+print(len(train_seq), len(test_seq))
+
+
+plabes_train = [seq[1] for seq in train_seq if seq[1] == 1]
+plabels_test = [seq[1] for seq in test_seq if seq[1] == 1]
+
+print(f'Positive labels in train: {len(plabes_train)/len(train_seq)}')
+print(f'Positive labels in test: {len(plabels_test)/len(test_seq)}')
+
+
+tudd_data_module = IcuDataModule(tudd_train_seq, tudd_test_seq, batch_size=BATCH_SIZE)
+
+trainer.test(model, datamodule=tudd_data_module)
 # %%
