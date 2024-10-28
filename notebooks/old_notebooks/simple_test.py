@@ -99,7 +99,7 @@ ALL_FEATURES = NUMERICAL_FEATURES + CAT_FEATURES
 DATASETS = [mbp, gcs, glc, creatinine, hr, potassium, wbc, platelets, inr, anion_gap, lactate, temperature, weight]# urea, sodium, rr
 
 # use small amount of data for testing
-small = False
+small = True 
 y_small = train_test_split(y, test_size=0.9, stratify=y['mortality'])[0]
 if small == True:
     for i in range(len(DATASETS)): 
@@ -206,6 +206,7 @@ plabels_test = [seq[1] for seq in test_seq if seq[1] == 1]
 
 print(f'Positive labels in train: {len(plabes_train)/len(train_seq)}')
 print(f'Positive labels in test: {len(plabels_test)/len(test_seq)}')
+print(f"shape MIMIC: {train_seq[0][0].shape}")
 
 #%%
 sequence,label= train_seq[0]
@@ -247,7 +248,7 @@ class IcuDataModule(pl.LightningDataModule):
         labels = [seq[1] for seq in self.train_sequences]
         sample_count = np.array([len(np.where(labels == t)[0]) for t in np.unique(labels)])
         weight = 1. / sample_count
-        samples_weight = np.array([weight[t] for t in labels])
+        samples_weight = np.array([weight[int(t)] for t in labels])
         sampler = WeightedRandomSampler(samples_weight, len(samples_weight))
 
         return DataLoader(self.train_dataset, 
@@ -394,9 +395,9 @@ trainer = pl.Trainer(
     gradient_clip_val=1.0,
 )
 
-trainer.fit(model, data_module)
+#trainer.fit(model, data_module)
 # %%
-trainer.test(model, datamodule=data_module)
+#trainer.test(model, datamodule=data_module)
 #%%%
 
 # %%
@@ -607,13 +608,19 @@ labels = [seq[1] for seq in sequences]
 train_seq, test_seq = train_test_split(sequences, test_size=0.2, stratify=labels, random_state=42)
 print(f'Training sequences: {len(train_seq)}, Test sequences: {len(test_seq)}')
 
+
+
+
+
+
+
 # %%
 labels = [seq[1] for seq in sequences]    # Labels (mortality)
 
 
 tudd_train_seq, tudd_test_seq = train_test_split(sequences, test_size=0.2, stratify=labels, random_state=42)
 print(len(train_seq), len(test_seq))
-
+print(f'shape TUDD: {train_seq[0][0].shape}')
 
 plabes_train = [seq[1] for seq in train_seq if seq[1] == 1]
 plabels_test = [seq[1] for seq in test_seq if seq[1] == 1]
@@ -624,5 +631,8 @@ print(f'Positive labels in test: {len(plabels_test)/len(test_seq)}')
 
 tudd_data_module = IcuDataModule(tudd_train_seq, tudd_test_seq, batch_size=BATCH_SIZE)
 
-trainer.test(model, datamodule=tudd_data_module)
+
+# %%
+trainer.fit(model, tudd_data_module)
+trainer.test(model, datamodule=data_module)
 # %%

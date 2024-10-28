@@ -289,9 +289,12 @@ class IcuDataModule(pl.LightningDataModule):
 
     def train_dataloader(self):
         labels = [seq[1] for seq in self.train_sequences]
+        non_int_labels = [label for label in labels if not isinstance(label, int)]
+        if non_int_labels:
+            print(f"Non-integer labels found: {non_int_labels}")
         sample_count = np.array([len(np.where(labels == t)[0]) for t in np.unique(labels)])
         weight = 1. / sample_count
-        samples_weight = np.array([weight[int(t)] for t in labels])
+        samples_weight = np.array([weight[t] for t in labels])
         sampler = WeightedRandomSampler(samples_weight, len(samples_weight))
 
         return DataLoader(self.train_dataset, 
