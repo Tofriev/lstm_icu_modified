@@ -1,6 +1,8 @@
 from classes.dataset_manager import DatasetManager
 from classes.trainer import Trainer
-import torch
+import hashlib
+import os 
+import csv
 
 class Pipeline (object):
     def __init__(self, variables, parameters, show=False):
@@ -25,12 +27,46 @@ class Pipeline (object):
             
     def train(self):
         trainer = Trainer(self.parameters)
-        if self.parameters['dataset_type'] == 'mimic_mimic':
-            trainer.train(self.sequences['mimic']['train'], self.sequences['mimic']['test'])
-        if self.parameters['dataset_type'] == 'tudd_tudd':
-            trainer.train(self.sequences['tudd']['train'], self.sequences['tudd']['test'])
+        if self.parameters['dataset_type'] == 'mimic_tudd' and self.parameters.get('fractional_steps'):
+            print("Training fractional")
+            self.result_dict = trainer.train_fractional(self.sequences)
+        elif self.parameters['dataset_type'] == 'mimic_mimic':
+            self.result_dict = trainer.train(self.sequences['mimic']['train'], self.sequences['mimic']['test'])
+        elif self.parameters['dataset_type'] == 'tudd_tudd':
+            self.result_dict = trainer.train(self.sequences['tudd']['train'], self.sequences['tudd']['test'])
         elif self.parameters['dataset_type'] == 'mimic_tudd':
-            trainer.train(self.sequences['mimic']['train'], self.sequences['tudd']['test'])
+            self.result_dict = trainer.train(self.sequences['mimic']['train'], self.sequences['tudd']['test'])
         elif self.parameters['dataset_type'] == 'tudd_mimic':
-            trainer.train(self.sequences['tudd']['train'], self.sequences['mimic']['test'])
+            self.result_dict = trainer.train(self.sequences['tudd']['train'], self.sequences['mimic']['test'])
+
+    def memorize(self, file_path='parameters_results.csv'):
+        entry = {**self.parameters, **self.result_dict[0]}
         
+        params_hash = hashlib.md5(str(sorted(entry.items())).encode()).hexdigest()
+        entry['parameters_hash'] = params_hash
+
+        entry_exists = False
+        if os.path.exists(file_path):
+            with open(file_path, mode='r', newline='') as file:
+                reader = csv.DictReader(file)
+                for row in reader:
+                    if row.get('parameters_hash') == params_hash:
+                        entry_exists = True
+                        break
+
+        if not entry_exists:
+            fieldnames = list(entry.keys())
+            with open(file_path, mode='a', newline='') as file:
+                writer = csv.DictWriter(file, fieldnames=fieldnames)
+                if file.tell() == 0:  
+                    writer.writeheader()
+                writer.writerow(entry)
+        
+
+
+
+
+
+
+
+    

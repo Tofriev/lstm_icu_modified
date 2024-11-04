@@ -69,9 +69,9 @@ anion_gap = pd.read_csv(os.path.join(project_root, 'data/raw/mimiciv/anion_gap.c
 lactate = pd.read_csv(os.path.join(project_root, 'data/raw/mimiciv/lactate.csv'))
 urea = pd.read_csv(os.path.join(project_root, 'data/raw/mimiciv/urea.csv')) 
 temperature = pd.read_csv(os.path.join(project_root, 'data/raw/mimiciv/temperature.csv')) 
-weight = pd.read_csv(os.path.join(project_root, 'data/raw/mimiciv/weights.csv'))
+weight = pd.read_csv(os.path.join(project_root, 'data/raw/mimiciv/weight.csv'))
 # age, gender, height, timeframe
-static = pd.read_csv(os.path.join(project_root, 'data/raw/mimiciv/static3.csv'))
+static = pd.read_csv(os.path.join(project_root, 'data/raw/mimiciv/static_data.csv'))
 
 
 SEQUENCE_FEATURES = [

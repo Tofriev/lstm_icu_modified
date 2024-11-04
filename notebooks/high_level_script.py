@@ -44,20 +44,25 @@ print(f'n features (should be 16): {n_features}')
 parameters = {
     'target':'mortality',
     #'dataset_type': 'tudd_tudd',
-    'dataset_type': 'mimic_mimic',
+    #'dataset_type': 'mimic_mimic',
     #'dataset_type': 'tudd_mimic',
-    'small_data': True, # not implemented for tudd yet 
+    'dataset_type': 'mimic_tudd',
+    #'fractional_steps': 1000, # example for mimic_tudd: adds 1000 samples from tudd train to the training set of mimic for every fraction
+    'small_data': False, # not implemented for tudd yet 
     'aggregation_frequency': 'H',
     'imputation': {'method': 'ffill_bfill'}, # uses mean for features without any values
     'sampling': {'method': 'undersampling', 'sampling_strategy': 0.1}, #minority / majority class = sampling streategy
     'scaling': 'standard', # also try MinMax, and Robust
     #'n_features': n_features,
     'n_features': 16,
-    'models': ['lstm'],  
+    #'models': ['lstm'],
+    #'models': ['multi_channel_lstm'],
+    #'models': ['cnn_lstm'],
+    'models': ['attention_lstm'],
     'model_parameters': {
         'lstm': { # model config will be input to model __init__
-            'n_hidden': 100,
-            'n_layers': 2,
+            'n_hidden': 50,
+            'n_layers': 1, # adjust this for stacked lstm
             'n_classes': 2, # also adjust the steps in lstm model for correct auroc calculation if this changes
             'dropout': 0.75,
             'bidirectional': True,
@@ -65,18 +70,64 @@ parameters = {
             'weight_decay': 1e-5,
             'class_weights': [1.0, 3.0],
             'batch_size': 32,
-            'n_epochs': 3,
+            'n_epochs': 30,
             'gradient_clip_val': 1,
-        },  
+        }, 
+        'multi_channel_lstm': {
+            'n_hidden': 50,
+            'n_layers': 1,
+            'n_classes': 2, # also adjust the steps in lstm model for correct auroc calculation if this changes
+            'dropout': 0.75,
+            'bidirectional': True,
+            'learning_rate': 1e-4,
+            'weight_decay': 1e-5,
+            'class_weights': [1.0, 3.0],
+            'batch_size': 32,
+            'n_epochs': 5,
+            'gradient_clip_val': 1,
+        },
+        'cnn_lstm': {
+            'n_hidden': 50,
+            'n_layers': 1,
+            'n_classes': 2, # also adjust the steps in lstm model for correct auroc calculation if this changes
+            'dropout': 0.75,
+            'bidirectional': True,
+            'learning_rate': 1e-4,
+            'weight_decay': 1e-5,
+            'class_weights': [1.0, 3.0],
+            'batch_size': 32,
+            'n_epochs': 5,
+            'gradient_clip_val': 1,
+            'architecture': 'cnn_lstm',  # 'cnn_lstm', 'lstm_cnn', 'parallel'
+            'cnn_out_channels': 64,
+            'kernel_size': 3,
+
+        },
+        'attention_lstm': {
+            'n_hidden': 50,
+            'n_layers': 1,
+            'n_classes': 2, # also adjust the steps in lstm model for correct auroc calculation if this changes
+            'dropout': 0.75,
+            'bidirectional': True,
+            'learning_rate': 1e-4,
+            'weight_decay': 1e-5,
+            'class_weights': [1.0, 3.0],
+            'batch_size': 32,
+            'n_epochs': 5,
+            'gradient_clip_val': 1,
+            'attention_type':'dot' # 'additive', 'dot'
+        } 
     },  
 }
-
+   
 
 pipe = Pipeline(variables=variables, parameters=parameters, show=True)
 pipe.prepare_data()
 pipe.train()
-
-
-
+pipe.memorize()
+print(pipe.result_dict)
 # %%
- 
+
+
+
+

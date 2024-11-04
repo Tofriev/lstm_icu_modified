@@ -29,7 +29,8 @@ class Preprocessor:
             self.process_mimic()
             print('Processing TUDD data...')
             self.process_tudd()
-
+        if self.parameters.get('fractional_steps') and self.parameters['dataset_type'] == 'mimic_tudd':
+            self.generate_fractions()
         return self.sequence_dict
             
     def process_mimic(self):
@@ -219,6 +220,32 @@ class Preprocessor:
 
         return variables_with_nan_count
     
+    def generate_fractions(self):
+        print('Generating fractional datasets...')
+        mimic_train = self.sequence_dict['mimic']['train']
+        mimic_test = self.sequence_dict['mimic']['test']
+        tudd_train = self.sequence_dict['tudd']['train']
+        tudd_test = self.sequence_dict['tudd']['test']
+
+        n_tudd_train = len(tudd_train)
+        step_size = self.parameters['fractional_steps']
+        fractional_datasets = {}
+        n_sampled_tudd_train = 0
+
+        while n_sampled_tudd_train+step_size < n_tudd_train:
+            n_sampled_tudd_train += step_size
+
+            # getg next tudd batch
+            tudd_samples = tudd_train[:n_sampled_tudd_train]
+            combined_train_set = mimic_train + tudd_samples
+
+            fractional_datasets[n_sampled_tudd_train] = combined_train_set
+
+            print(f'fraction {n_sampled_tudd_train} added')
+
+        self.sequence_dict['fractional_mimic_tudd'] = fractional_datasets
+
+
 
     def process_tudd(self):
         measurements = self.data['tudd']['measurements']

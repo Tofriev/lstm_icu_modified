@@ -40,8 +40,8 @@ class DatasetManager:
             self.load_tudd()
         if self.parameters.get('small_data', False):
             self.reduce_data()
-        sequences = self.preprocess()
-        self.data['sequences'] = sequences
+        self.data['sequences'] = self.preprocess()
+
        
 
     def load_mimic(self):
