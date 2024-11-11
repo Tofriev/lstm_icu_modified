@@ -1,2 +1,5 @@
 mimic.csv
 data/
+logs/
+notebooks/lightning_logs/
+notebooks/
