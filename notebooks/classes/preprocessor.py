@@ -5,6 +5,9 @@ from sklearn.model_selection import train_test_split
 from imblearn.under_sampling import RandomUnderSampler
 from sklearn.impute import KNNImputer
 from utils import set_seed
+import matplotlib.pyplot as plt
+import seaborn as sns
+import random
 
 set_seed(42)
 
@@ -16,6 +19,9 @@ class Preprocessor:
         self.aggregation_freq = self.parameters.get('aggregation_frequency', 'H')
         self.imputation = self.parameters['imputation']
         self.sequence_dict = {}
+        self.plot_dict = {}
+        self.compare_distributions = self.parameters.get('compare_distributions', False)
+        self.shuffle = self.parameters.get('shuffle', False)
 
     def process(self):
         if self.parameters['dataset_type'] == 'tudd_tudd':
@@ -31,6 +37,11 @@ class Preprocessor:
             self.process_tudd()
         if self.parameters.get('fractional_steps') and self.parameters['dataset_type'] == 'mimic_tudd':
             self.generate_fractions()
+        if self.compare_distributions:
+            mimic_df = self.plot_dict['mimic']
+            tudd_df = self.plot_dict['tudd']
+            self.plot_density(mimic_df, tudd_df, self.NUMERICAL_FEATURES)
+        
         return self.sequence_dict
             
     def process_mimic(self):
@@ -89,6 +100,8 @@ class Preprocessor:
         static_columns = [col for col in self.data['mimic']['static_data'].columns if col not in ['intime', 'first_day_end']]
         merged_df = pd.merge(merged_df, self.data['mimic']['static_data'][static_columns], on='stay_id', how='left')
         self.merged_df = merged_df
+        if self.compare_distributions:
+            self.plot_dict['mimic'] = merged_df
     
     def make_feature_lists(self):
         SEQUENCE_FEATURES = []
@@ -101,7 +114,7 @@ class Preprocessor:
         if 'age' in self.merged_df.columns:
             NUMERICAL_FEATURES.append('age')
         if 'height' in self.merged_df.columns:
-            NUMERICAL_FEATURES.append('height')
+            NUMERICAL_FEATURES.append('height_value')
         CAT_FEATURES = []
         if 'gender' in self.merged_df.columns:
             CAT_FEATURES.append('gender')
@@ -153,8 +166,13 @@ class Preprocessor:
             print("All stay IDs have 25 rows.")
 
     def create_sequences(self):
+        print(f'MIMIC features: {self.merged_df.columns}')  
+        print(f'n_MIMIC: {len(self.merged_df.columns)}')
+        print(self.merged_df.describe())
         X = self.merged_df
         sequences = []
+        print(f'length MIMIC ALL FEATURES: {len(self.ALL_FEATURES)}')
+        print(self.ALL_FEATURES)
         for stay_id, group in X.groupby('stay_id'):
             group = group.sort_values('charttime')
             features = group[self.ALL_FEATURES].values
@@ -166,6 +184,7 @@ class Preprocessor:
         labels = [seq[1] for seq in self.sequences]
         self.sequence_dict['mimic'] = {}
         self.sequence_dict['mimic']['train'], self.sequence_dict['mimic']['test'] = train_test_split(self.sequences, test_size=0.2, stratify=labels, random_state=42)
+        print(self.sequence_dict['mimic']['test'][0][0].shape)
 
     def impute_with_mean(self, X):
         global_means = X[self.NUMERICAL_FEATURES].mean()
@@ -227,17 +246,19 @@ class Preprocessor:
         tudd_train = self.sequence_dict['tudd']['train']
         tudd_test = self.sequence_dict['tudd']['test']
 
-        n_tudd_train = len(tudd_train)
+        n_tudd_train = len(tudd_train) - 2000
         step_size = self.parameters['fractional_steps']
         fractional_datasets = {}
         n_sampled_tudd_train = 0
-
+        
         while n_sampled_tudd_train+step_size < n_tudd_train:
             n_sampled_tudd_train += step_size
 
             # getg next tudd batch
             tudd_samples = tudd_train[:n_sampled_tudd_train]
             combined_train_set = mimic_train + tudd_samples
+            if self.shuffle == True:
+                random.shuffle(combined_train_set)
 
             fractional_datasets[n_sampled_tudd_train] = combined_train_set
 
@@ -245,14 +266,26 @@ class Preprocessor:
 
         self.sequence_dict['fractional_mimic_tudd'] = fractional_datasets
 
-
+    def plot_density(self, mimic_df, tudd_df, features):
+    
+        for feature in features:
+            plt.figure(figsize=(10, 6))
+            sns.kdeplot(mimic_df[feature].dropna(), label='MIMIC', fill=True, alpha=0.5)
+            sns.kdeplot(tudd_df[feature].dropna(), label='TUDD', fill=True, alpha=0.5)
+            plt.title(f'Density Plot for {feature}')
+            plt.xlabel(feature)
+            plt.ylabel('Density')
+            plt.legend()
+            plt.show()
+            print(f"Mean {feature} MIMIC: {mimic_df[feature].mean()}")
+            print(f"Mean {feature} TUDD: {tudd_df[feature].mean()}")
 
     def process_tudd(self):
         measurements = self.data['tudd']['measurements']
         mortality_info = self.data['tudd']['mortality_info']
 
         self.SEQUENCE_FEATURES = [
-        'hr_value', 'mbp_value', 'total_gcs', 'glc_value', 'creatinine_value', 
+        'hr_value', 'mbp_value', 'gcs_total_value', 'glc_value', 'creatinine_value', 
         'potassium_value', 'wbc_value', 'platelets_value', 'inr_value', 
         'anion_gap_value', 'lactate_value', 'temperature_value', 'weight_value'
         ]
@@ -318,7 +351,7 @@ class Preprocessor:
             'HF': 'hr_value', 'AGAP': 'anion_gap_value', 'GLUC': 'glc_value',
             'CREA': 'creatinine_value', 'K': 'potassium_value', 'LEU': 'wbc_value',
             'THR': 'platelets_value', 'Q': 'inr_value', 'LAC': 'lactate_value',
-            'T': 'temperature_value', 'GCS': 'total_gcs', 'MAP': 'mbp_value',
+            'T': 'temperature_value', 'GCS': 'gcs_total_value', 'MAP': 'mbp_value',
             'bodyweight': 'weight_value', 'bodyheight': 'height_value'
         }
         merged_df.rename(columns=treatmentnames_mapping, inplace=True)
@@ -332,6 +365,31 @@ class Preprocessor:
             'lactate_value': (0.1, 200), 'creatinine_value': (0.1, 20)
         }
 
+        # mean before conversion
+        print("Mean before conversion:")
+        print(f"Glucose (mmol/L): {merged_df['glc_value'].mean()}")
+        print(f"Creatinine (micro_mol/L): {merged_df['creatinine_value'].mean()}")
+        print(f"INR (Quick): {merged_df['inr_value'].mean()}")
+        print(f"Lactate (mmol/L): {merged_df['lactate_value'].mean()}")
+
+        # convert units
+        # glucose mmol/L to mg/dL
+        merged_df['glc_value'] = merged_df['glc_value'] * 18.0182
+        print(f"Glucose conversion done: {merged_df['glc_value'].mean()} mg/dL")
+
+        # creatinine micro_mol/L to mg/dL
+        merged_df['creatinine_value'] = merged_df['creatinine_value'] * 0.0113
+        print(f"Creatinine conversion done: {merged_df['creatinine_value'].mean()} mg/dL")
+
+        # convert quick to inr 
+        merged_df['inr_value'] = merged_df['inr_value'] / 100
+        print(f"INR conversion done: {merged_df['inr_value'].mean()}")
+
+        # convert lactate mmol/L to mg/dL
+        # merged_df['lactate_value'] = merged_df['lactate_value'] * 9.01
+        # print(f"Lactate conversion done: {merged_df['lactate_value'].mean()} mg/dL")
+
+        # filter
         merged_df = merged_df[merged_df['age'] >= 18]
         merged_df['age'] = merged_df['age'].apply(lambda x: min(x, 90))
 
@@ -339,7 +397,8 @@ class Preprocessor:
             if feature in merged_df.columns:
                 merged_df.loc[merged_df[feature] < lower, feature] = np.nan
                 merged_df.loc[merged_df[feature] > upper, feature] = np.nan
-
+        if self.compare_distributions:
+            self.plot_dict['tudd'] = merged_df
         # imputation
         merged_df.sort_values(['caseid', 'measurement_time_from_admission'], inplace=True)
         merged_df = merged_df.groupby('caseid').apply(lambda group: group.ffill().bfill()).reset_index(drop=True)
@@ -356,20 +415,44 @@ class Preprocessor:
         merged_df[self.NUMERICAL_FEATURES] = scaler.fit_transform(merged_df[self.NUMERICAL_FEATURES])
 
         column_order = [
-            'caseid', 'measurement_time_from_admission', 'mbp_value', 'total_gcs', 'glc_value',
-            'creatinine_value', 'hr_value', 'potassium_value', 'wbc_value', 'platelets_value',
-            'inr_value', 'anion_gap_value', 'lactate_value', 'temperature_value', 'weight_value',
-            'age', 'gender', 'height_value', 'exitus'
+            'caseid', 'measurement_time_from_admission', 'mbp_value', 'gcs_total_value', 'glc_value',
+            'creatinine_value', 'potassium_value', 'hr_value', 'wbc_value', 'platelets_value',
+            'lactate_value','temperature_value','weight_value', 'inr_value', 'anion_gap_value', 'exitus',   
+            'age', 'gender', 'height_value'
         ]
         sorted_merged_df = merged_df[column_order]
+        
+        # drop 'anion_gap_value'
+        sorted_merged_df.drop(columns=['anion_gap_value'], inplace=True)
+        self.SEQUENCE_FEATURES.remove('anion_gap_value')
+        self.NUMERICAL_FEATURES.remove('anion_gap_value')
+        self.ALL_FEATURES.remove('anion_gap_value')
+
+        # drop 'inr_value'
+        sorted_merged_df.drop(columns=['inr_value'], inplace=True)
+        self.SEQUENCE_FEATURES.remove('inr_value')
+        self.NUMERICAL_FEATURES.remove('inr_value')
+        self.ALL_FEATURES.remove('inr_value')
+
+        # drop lactate_value
+        sorted_merged_df.drop(columns=['lactate_value'], inplace=True)
+        self.SEQUENCE_FEATURES.remove('lactate_value')
+        self.NUMERICAL_FEATURES.remove('lactate_value')
+        self.ALL_FEATURES.remove('lactate_value')
+
+        print(f'TUDD features: {sorted_merged_df.columns}')
+        print(f'n_TUDD: {len(sorted_merged_df.columns)}')
+        print(sorted_merged_df.describe())
 
         sequences = []
         for caseid, group in sorted_merged_df.groupby('caseid'):
             if len(group) == 25:
-                features = group[self.ALL_FEATURES].values
+                features = group[['mbp_value', 'gcs_total_value', 'glc_value', 'creatinine_value', 'potassium_value', 'hr_value', 'wbc_value', 'platelets_value', 'temperature_value', 'weight_value', 'age', 'gender']].values
                 label = group['exitus'].iloc[0]
                 sequences.append((features, label))
-
+        print(f'length TUDD ALL FEATURES: {len(self.ALL_FEATURES)}')
+        print(self.ALL_FEATURES)
         labels = [seq[1] for seq in sequences]
         self.sequence_dict['tudd'] = {}
         self.sequence_dict['tudd']['train'], self.sequence_dict['tudd']['test'] = train_test_split(sequences, test_size=0.2, stratify=labels, random_state=42)
+        print(self.sequence_dict['tudd']['test'][0][0].shape)

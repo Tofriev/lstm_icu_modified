@@ -78,7 +78,7 @@ SEQUENCE_FEATURES = [
                     'hr_value'
                      ,'mbp_value'
                      #,'rr_value'
-                     ,'total_gcs'
+                     #,'total_gcs'
                      ,'glc_value'
                      ,'creatinine_value'
                      ,'potassium_value'
@@ -139,7 +139,7 @@ time_grid = create_time_grid(static)
 
 # merge vars on time grid
 merged_df = time_grid.copy()
-for data in aggregated_datasets: 
+for data in aggregated_datasets:
     merged_df = pd.merge(merged_df, data, on=['stay_id', 'charttime'], how='left')
 merged_df = pd.merge(merged_df, static[['stay_id', 'age', 'gender', 'height']], on='stay_id', how='left')
 X_MIMIC = merged_df.copy()
@@ -229,20 +229,42 @@ treatmentnames_mapping = {
     'Q': 'inr_value',
     'LAC': 'lactate_value',
     'T': 'temperature_value',
-    'GCS': 'total_gcs',
+    #'GCS': 'total_gcs',
     'MAP': 'mbp_value',
     'bodyweight': 'weight_value',
     'bodyheight': 'height_value'
 }
 cols_to_rename = {old_name: treatmentnames_mapping.get(old_name, old_name) for old_name in merged_df.columns}
 merged_df.rename(columns=cols_to_rename, inplace=True)
+# mean before conversion
+print("Mean before conversion:")
+print(f"Glucose (mmol/L): {merged_df['glc_value'].mean()}")
+print(f"Creatinine (micro_mol/L): {merged_df['creatinine_value'].mean()}")
+print(f"INR (Quick): {merged_df['inr_value'].mean()}")
+print(f"Lactate (mmol/L): {merged_df['lactate_value'].mean()}")
 
+# convert units
+# glucose mmol/L to mg/dL
+merged_df['glc_value'] = merged_df['glc_value'] * 18.0182
+print(f"Glucose conversion done: {merged_df['glc_value'].mean()} mg/dL")
+
+# creatinine micro_mol/L to mg/dL
+merged_df['creatinine_value'] = merged_df['creatinine_value'] * 0.0113
+print(f"Creatinine conversion done: {merged_df['creatinine_value'].mean()} mg/dL")
+
+# convert quick to inr 
+merged_df['inr_value'] = merged_df['inr_value'] / 100
+print(f"INR conversion done: {merged_df['inr_value'].mean()}")
+
+# convert lactate mmol/L to mg/dL
+#merged_df['lactate_value'] = merged_df['lactate_value'] * 9.01
+print(f"Lactate conversion done: {merged_df['lactate_value'].mean()} mg/dL")
 
 #%%
 SEQUENCE_FEATURES = [
     'hr_value',
     'mbp_value',
-    'total_gcs',
+    #'total_gcs',
     'glc_value',
     'creatinine_value',
     'potassium_value',
@@ -290,9 +312,9 @@ for feature, (lower, upper) in bounds.items():
     if feature in merged_df.columns:
         merged_df.loc[merged_df[feature] < lower, feature] = np.nan
         merged_df.loc[merged_df[feature] > upper, feature] = np.nan
-
+print(f"Lactate mean after bounds: {merged_df['lactate_value'].mean()} mg/dL")
 X_TUDD = merged_df.copy()
-
+print(f"Lactate mean after copying to X_TUDD: {X_TUDD['lactate_value'].mean()} mg/dL")
 
 print(f'MIMIC: {X_MIMIC.shape}')
 print(f'TUDD: {X_TUDD.shape}')
@@ -306,6 +328,10 @@ print(f'TUDD: {X_TUDD.describe()}')
 #%%
 # compare distributions
 for feature in SEQUENCE_FEATURES:
+    if feature == 'lactate_value':
+        print(f'Feature {feature} mean: {X_MIMIC[feature].mean()}')
+    if feature == 'inr_value':
+        print(f'Feature {feature} mean: {X_MIMIC[feature].mean()}')
     plt.figure(figsize=(12, 6))
     
     sns.kdeplot(X_MIMIC[feature].dropna(), label='MIMIC', fill=True, color='blue')

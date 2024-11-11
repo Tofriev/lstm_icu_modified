@@ -40,7 +40,10 @@ class Pipeline (object):
             self.result_dict = trainer.train(self.sequences['tudd']['train'], self.sequences['mimic']['test'])
 
     def memorize(self, file_path='parameters_results.csv'):
-        entry = {**self.parameters, **self.result_dict[0]}
+        if self.parameters['fractional_steps']:
+            entry = {**self.parameters, **self.result_dict}
+        else:
+            entry = {**self.parameters, **self.result_dict[0]}
         
         params_hash = hashlib.md5(str(sorted(entry.items())).encode()).hexdigest()
         entry['parameters_hash'] = params_hash

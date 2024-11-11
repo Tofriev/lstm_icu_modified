@@ -3,10 +3,15 @@ from classes.dataset_manager import DatasetManager
 from classes.pipeline import Pipeline
 from dataclasses import dataclass
 from utils import set_seed
+import json
+import os
 
 set_seed(42)
 
 # high level functionalities work maily for mimic (yet)
+
+
+# feature height soimehow nort included
 variables = {
     'mbp': {'type': 'numerical', 'sequence': True, 'training': True},             # Mean Blood Pressure
     'gcs_total': {'type': 'numerical', 'sequence': True, 'training': True},       # Glasgow Coma Scale Total
@@ -18,9 +23,9 @@ variables = {
     #'sodium': {'type': 'numerical', 'sequence': True, 'training': True},          # Sodium levels
     'wbc': {'type': 'numerical', 'sequence': True, 'training': True},             # White Blood Cells (leukocytes)
     'platelets': {'type': 'numerical', 'sequence': True, 'training': True},       # Platelets (thrombocytes)
-    'inr': {'type': 'numerical', 'sequence': True, 'training': True},             # International Normalized Ratio (Prothrombin Time)
-    'anion_gap': {'type': 'numerical', 'sequence': True, 'training': True},       # Anion Gap
-    'lactate': {'type': 'numerical', 'sequence': True, 'training': True},         # Lactate levels
+    #'inr': {'type': 'numerical', 'sequence': True, 'training': True},             # International Normalized Ratio (Prothrombin Time)
+    #'anion_gap': {'type': 'numerical', 'sequence': True, 'training': True},       # Anion Gap
+    #'lactate': {'type': 'numerical', 'sequence': True, 'training': True},         # Lactate levels
     #'urea': {'type': 'numerical', 'sequence': True, 'training': True},            # Urea levels
     'temperature': {'type': 'numerical', 'sequence': True, 'training': True},     # Body Temperature
     'weight': {'type': 'numerical', 'sequence': True, 'training': True},          # Weight over time (time series)
@@ -35,9 +40,7 @@ variables = {
     }
 }
 
-n_features = sum(1 for v in variables.values() if isinstance(v, dict) and v.get('sequence', False))
-n_features += sum(1 for v in variables['static_data'].values() if isinstance(v, dict) and v.get('sequence', False))
-print(f'n features (should be 16): {n_features}') 
+
 
 
 # model parameters work also for tudd
@@ -47,22 +50,24 @@ parameters = {
     #'dataset_type': 'mimic_mimic',
     #'dataset_type': 'tudd_mimic',
     'dataset_type': 'mimic_tudd',
-    #'fractional_steps': 1000, # example for mimic_tudd: adds 1000 samples from tudd train to the training set of mimic for every fraction
+    'fractional_steps': 1000, # example for mimic_tudd: adds 1000 samples from tudd train to the training set of mimic for every fraction
     'small_data': False, # not implemented for tudd yet 
     'aggregation_frequency': 'H',
     'imputation': {'method': 'ffill_bfill'}, # uses mean for features without any values
     'sampling': {'method': 'undersampling', 'sampling_strategy': 0.1}, #minority / majority class = sampling streategy
     'scaling': 'standard', # also try MinMax, and Robust
     #'n_features': n_features,
-    'n_features': 16,
+    'n_features': 12,
     #'models': ['lstm'],
     #'models': ['multi_channel_lstm'],
-    #'models': ['cnn_lstm'],
-    'models': ['attention_lstm'],
+    'models': ['cnn_lstm'],
+    #'models': ['attention_lstm'],
+    'compare_distributions': False,
+    'shuffle': True,
     'model_parameters': {
         'lstm': { # model config will be input to model __init__
-            'n_hidden': 50,
-            'n_layers': 1, # adjust this for stacked lstm
+            'n_hidden': 100,
+            'n_layers': 2, # adjust this for stacked lstm
             'n_classes': 2, # also adjust the steps in lstm model for correct auroc calculation if this changes
             'dropout': 0.75,
             'bidirectional': True,
@@ -70,11 +75,11 @@ parameters = {
             'weight_decay': 1e-5,
             'class_weights': [1.0, 3.0],
             'batch_size': 32,
-            'n_epochs': 30,
+            'n_epochs': 3,
             'gradient_clip_val': 1,
         }, 
         'multi_channel_lstm': {
-            'n_hidden': 50,
+            'n_hidden': 100,
             'n_layers': 1,
             'n_classes': 2, # also adjust the steps in lstm model for correct auroc calculation if this changes
             'dropout': 0.75,
@@ -87,7 +92,7 @@ parameters = {
             'gradient_clip_val': 1,
         },
         'cnn_lstm': {
-            'n_hidden': 50,
+            'n_hidden': 100,
             'n_layers': 1,
             'n_classes': 2, # also adjust the steps in lstm model for correct auroc calculation if this changes
             'dropout': 0.75,
@@ -98,13 +103,13 @@ parameters = {
             'batch_size': 32,
             'n_epochs': 5,
             'gradient_clip_val': 1,
-            'architecture': 'cnn_lstm',  # 'cnn_lstm', 'lstm_cnn', 'parallel'
+            'architecture': 'parallel',  # 'cnn_lstm', 'lstm_cnn', 'parallel'
             'cnn_out_channels': 64,
             'kernel_size': 3,
 
         },
         'attention_lstm': {
-            'n_hidden': 50,
+            'n_hidden': 100,
             'n_layers': 1,
             'n_classes': 2, # also adjust the steps in lstm model for correct auroc calculation if this changes
             'dropout': 0.75,
@@ -121,13 +126,52 @@ parameters = {
 }
    
 
+
+
+
+
+
+
+
+
+
+model_names = ['attention_lstm']
+#model_names = ['lstm', 'multi_channel_lstm', 'cnn_lstm', 'attention_lstm']
+
+json_file = 'results.json'
+for model_name in model_names:
+    parameters['models'] = [model_name]
+    pipe = Pipeline(variables=variables, parameters=parameters, show=True)
+    
+    pipe.prepare_data()
+    pipe.train()
+    print(pipe.result_dict)
+    pipe.result_dict['model_name'] = model_name
+    if not os.path.exists(json_file) or os.stat(json_file).st_size == 0:
+        with open(json_file, 'w') as file:
+            json.dump([], file)
+
+    with open(json_file, 'r') as file:
+        data = json.load(file)
+
+    data.append(pipe.result_dict)
+    with open(json_file, 'w') as file:
+        json.dump(data, file)
+
+  
+#%%
 pipe = Pipeline(variables=variables, parameters=parameters, show=True)
 pipe.prepare_data()
 pipe.train()
-pipe.memorize()
+#pipe.memorize()
 print(pipe.result_dict)
+#%%
+
 # %%
+pipe.memorize()
 
 
+
+# %%
 
 

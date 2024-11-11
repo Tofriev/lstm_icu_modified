@@ -48,6 +48,7 @@ class Trainer:
 
             pl_trainer = pl.Trainer(
                 logger=logger,
+                enable_checkpointing=False,
                 #callbacks=[checkpoint_callback],
                 max_epochs=n_epochs,
                 accelerator='mps' if torch.backends.mps.is_available() else 'cpu',
