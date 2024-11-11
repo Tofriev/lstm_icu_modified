@@ -47,11 +47,12 @@ variables = {
 parameters = {
     'target':'mortality',
     #'dataset_type': 'tudd_tudd',
-    #'dataset_type': 'mimic_mimic',
+    'dataset_type': 'mimic_mimic',
     #'dataset_type': 'tudd_mimic',
-    'dataset_type': 'mimic_tudd',
-    'fractional_steps': 1000, # example for mimic_tudd: adds 1000 samples from tudd train to the training set of mimic for every fraction
-    'small_data': False, # not implemented for tudd yet 
+    #'dataset_type': 'mimic_tudd',
+    #'dataset_type': 'mimic_tudd_fract',
+    #'fractional_steps': 1000, # example for mimic_tudd: adds 1000 samples from tudd train to the training set of mimic for every fraction
+    'small_data': True, # not implemented for tudd yet 
     'aggregation_frequency': 'H',
     'imputation': {'method': 'ffill_bfill'}, # uses mean for features without any values
     'sampling': {'method': 'undersampling', 'sampling_strategy': 0.1}, #minority / majority class = sampling streategy
@@ -133,8 +134,8 @@ parameters = {
 
 
 
-
-
+#%%
+# only for fractional learning: use cell underneath otherwise
 model_names = ['attention_lstm']
 #model_names = ['lstm', 'multi_channel_lstm', 'cnn_lstm', 'attention_lstm']
 

@@ -35,7 +35,7 @@ class Preprocessor:
             self.process_mimic()
             print('Processing TUDD data...')
             self.process_tudd()
-        if self.parameters.get('fractional_steps') and self.parameters['dataset_type'] == 'mimic_tudd':
+        if self.parameters.get('fractional_steps') and self.parameters['dataset_type'] == 'mimic_tudd_fract':
             self.generate_fractions()
         if self.compare_distributions:
             mimic_df = self.plot_dict['mimic']

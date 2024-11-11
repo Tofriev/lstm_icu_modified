@@ -33,7 +33,7 @@ class DatasetManager:
         elif self.dataset_type == 'tudd_tudd':
             self.data['tudd'] = {}
             self.load_tudd()
-        elif self.dataset_type == 'mimic_tudd' or self.dataset_type == 'tudd_mimic':
+        elif self.dataset_type == 'mimic_tudd' or self.dataset_type == 'tudd_mimic' or self.dataset_type == 'mimic_tudd_fract':
             self.data['tudd'] = {}
             self.data['mimic'] = {}
             self.load_mimic()

@@ -27,7 +27,7 @@ class Pipeline (object):
             
     def train(self):
         trainer = Trainer(self.parameters)
-        if self.parameters['dataset_type'] == 'mimic_tudd' and self.parameters.get('fractional_steps'):
+        if self.parameters['dataset_type'] == 'mimic_tudd_fract' and self.parameters.get('fractional_steps'):
             print("Training fractional")
             self.result_dict = trainer.train_fractional(self.sequences)
         elif self.parameters['dataset_type'] == 'mimic_mimic':
