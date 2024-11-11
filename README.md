@@ -2,4 +2,4 @@ currently in progress. Small pipeline in order to predict mortality in the icu w
 
 Usage: 
 - create conda env using the environment.yml
-- go to hight level script for running the pipeline
+- go to high level script for running the pipeline
