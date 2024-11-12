@@ -40,19 +40,27 @@ class DatasetManager:
             self.load_tudd()
         if self.parameters.get('small_data', False):
             self.reduce_data()
-        self.data['sequences'] = self.preprocess()
+        self.data['sequences'], self.feature_index_mapping = self.preprocess()
 
-       
+    def preprocess(self):
+        preprocessor = Preprocessor(self.data, self.variables, self.parameters)
+        sequences = preprocessor.process()
+        return sequences
+        
 
     def load_mimic(self):
         for variable, _ in self.variables.items():
             file_path = os.path.join(self.mimic_datapath, f"{variable}.csv")
             if os.path.exists(file_path):
                 self.data['mimic'][variable] = pd.read_csv(file_path)
+                if variable == 'static_data':
+                    static_data_keys = self.variables['static_data'].keys()
+                    self.data['mimic'][variable] = self.data['mimic'][variable][list(static_data_keys)]
                 if self.data['mimic'][variable].empty:
                     print(f"Warning: {variable}.csv was loaded but contains no data.")
             else:
                 print(f"Warning: {variable}.csv does not exist in {self.mimic_datapath}")
+        print(self.data['mimic']['static_data'].keys())
 
     def load_tudd(self):
         file_path = os.path.join(self.tudd_datapath, 'tudd_complete.csv')
@@ -86,10 +94,6 @@ class DatasetManager:
         elif self.dataset_type == 'tudd_tudd':
             raise NotImplementedError("Method for reducing TUDD data is not implemented yet.")
 
-    def preprocess(self):
-        preprocessor = Preprocessor(self.data, self.variables, self.parameters)
-        sequences = preprocessor.process()
-        return sequences
-       
+   
         
 

@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.model_selection import train_test_split
 from imblearn.under_sampling import RandomUnderSampler
 from sklearn.impute import KNNImputer
@@ -18,6 +18,8 @@ class Preprocessor:
         self.parameters = parameters
         self.aggregation_freq = self.parameters.get('aggregation_frequency', 'H')
         self.imputation = self.parameters['imputation']
+        if self.imputation['method'] == 'knn':
+            self.imputation['n_neighbors'] = self.parameters.get('n_neighbors', 5)
         self.sequence_dict = {}
         self.plot_dict = {}
         self.compare_distributions = self.parameters.get('compare_distributions', False)
@@ -38,22 +40,31 @@ class Preprocessor:
         if self.parameters.get('fractional_steps') and self.parameters['dataset_type'] == 'mimic_tudd_fract':
             self.generate_fractions()
         if self.compare_distributions:
-            mimic_df = self.plot_dict['mimic']
-            tudd_df = self.plot_dict['tudd']
-            self.plot_density(mimic_df, tudd_df, self.NUMERICAL_FEATURES)
-        
-        return self.sequence_dict
+            if 'tudd' in self.parameters['dataset_type'] and 'mimic' in self.parameters['dataset_type']:
+                mimic_df = self.plot_dict['mimic']
+                tudd_df = self.plot_dict['tudd']
+                mimic_imputed_df = self.plot_dict['mimic_imputed']
+                tudd_imputed_df = self.plot_dict['tudd_imputed']
+                print('Distributions before imputation:')
+                self.plot_density(mimic_df, tudd_df, self.MIMIC_NUMERICAL_FEATURES)
+                print('Distributions after imputation:')
+                self.plot_density(mimic_imputed_df, tudd_imputed_df, self.MIMIC_NUMERICAL_FEATURES)
+            
+        return self.sequence_dict, self.feature_index_mapping
             
     def process_mimic(self):
         self.variable_conversion_and_aggregation()
         self.create_time_grid()
-        self.merge_on_time_grid()
+        merged = self.merge_on_time_grid()
         self.make_feature_lists() 
-
-        self.impute()
+        
+        imputed_df = self.impute(merged)
+        if self.compare_distributions:
+            self.plot_dict['mimic_imputed'] = imputed_df
+        self.merged_df = imputed_df
         if self.parameters.get('sampling', False) != False:
             self.sample()
-        self.scale()
+        self.scale_normalize()
         self.check()
         self.create_sequences()
         self.split_train_test_sequences()
@@ -102,6 +113,7 @@ class Preprocessor:
         self.merged_df = merged_df
         if self.compare_distributions:
             self.plot_dict['mimic'] = merged_df
+        return merged_df
     
     def make_feature_lists(self):
         SEQUENCE_FEATURES = []
@@ -113,29 +125,37 @@ class Preprocessor:
         NUMERICAL_FEATURES = SEQUENCE_FEATURES + []
         if 'age' in self.merged_df.columns:
             NUMERICAL_FEATURES.append('age')
-        if 'height' in self.merged_df.columns:
-            NUMERICAL_FEATURES.append('height_value')
+        # if 'height' in self.merged_df.columns:
+        #     NUMERICAL_FEATURES.append('height_value')
         CAT_FEATURES = []
         if 'gender' in self.merged_df.columns:
             CAT_FEATURES.append('gender')
         self.SEQUENCE_FEATURES = SEQUENCE_FEATURES
         self.NUMERICAL_FEATURES = NUMERICAL_FEATURES
+        self.MIMIC_NUMERICAL_FEATURES = NUMERICAL_FEATURES
         self.CAT_FEATURES = CAT_FEATURES
         self.ALL_FEATURES = NUMERICAL_FEATURES + CAT_FEATURES
 
 
-    def impute(self):
-        X = self.merged_df
+    def impute(self, input_df):
+        renamed = False
+        if 'measurement_time_from_admission' in input_df.columns:
+            input_df.rename(columns={'measurement_time_from_admission': 'charttime'}, inplace=True)
+            renamed = True
         if self.imputation['method'] == 'mean':
-            self.impute_with_mean(X)
+            imputed_df = self.impute_with_mean(input_df)
         elif self.imputation['method'] == 'rolling_mean':
-            self.impute_with_rolling_mean(X)
+            imputed_df = self.impute_with_rolling_mean(input_df)
         elif self.imputation['method'] == 'ffill_bfill':
-            self.impute_with_ffill_bfill(X)
+            imputed_df = self.impute_with_ffill_bfill(input_df)
         elif self.imputation['method'] == 'knn':
-            self.impute_with_knn(X)
-        self.merged_df = X
-        print(self.merged_df.head())
+            imputed_df = self.impute_with_knn(input_df)
+        
+        # impute remaining missing values with global mean
+        imputed_df[self.NUMERICAL_FEATURES] = imputed_df[self.NUMERICAL_FEATURES].fillna(imputed_df[self.NUMERICAL_FEATURES].mean())
+        if renamed:
+            imputed_df.rename(columns={'charttime': 'measurement_time_from_admission'}, inplace=True)
+        return imputed_df
     
     def sample(self):
         method = self.parameters['sampling']['method']
@@ -147,11 +167,19 @@ class Preprocessor:
             stay_ids = y_undersampled_stayids['stay_id']
             self.merged_df = X[X['stay_id'].isin(stay_ids)]
 
-    def scale(self):
+    def scale_normalize(self):
         if self.parameters['scaling'] == 'standard':
             X = self.merged_df
-            scaler = StandardScaler()
-            X[self.NUMERICAL_FEATURES] = scaler.fit_transform(X[self.NUMERICAL_FEATURES])
+            mimic_scaler = StandardScaler()
+            X[self.NUMERICAL_FEATURES] = mimic_scaler.fit_transform(X[self.NUMERICAL_FEATURES])
+            self.mimic_scaler = mimic_scaler
+            self.merged_df = X
+        elif self.parameters['scaling'] == 'MinMax':
+            X = self.merged_df
+            mimic_scaler = MinMaxScaler(feature_range=(self.parameters['scaling_range'][0], self.parameters['scaling_range'][1]))
+            X[self.NUMERICAL_FEATURES] = mimic_scaler.fit_transform(X[self.NUMERICAL_FEATURES])
+            self.MIMIC_NUMERICAL_FEATURES = self.NUMERICAL_FEATURES
+            self.mimic_scaler = mimic_scaler
             self.merged_df = X
 
     def check(self):
@@ -178,7 +206,9 @@ class Preprocessor:
             features = group[self.ALL_FEATURES].values
             label = group[self.parameters['target']].iloc[0]
             sequences.append((features, label))
+        self.ALL_FEATURES_MIMIC = self.ALL_FEATURES
         self.sequences = sequences
+        self.feature_index_mapping = {index: feature for index, feature in enumerate(self.ALL_FEATURES)}
 
     def split_train_test_sequences(self):
         labels = [seq[1] for seq in self.sequences]
@@ -192,44 +222,71 @@ class Preprocessor:
         for cat_feature in self.CAT_FEATURES:
             X[cat_feature].fillna(X[cat_feature].mode()[0], inplace=True)
 
+    
+
     def impute_with_rolling_mean(self, X):
         X = X.sort_values(['stay_id', 'charttime'])
         X[self.NUMERICAL_FEATURES] = X.groupby('stay_id')[self.NUMERICAL_FEATURES].apply(
             lambda group: group.fillna(group.rolling(window=3, min_periods=1).mean())
         )
 
-    def impute_with_ffill_bfill(self, X):
-        self.find_variables_with_only_nan(X)
-        X.sort_values(['stay_id', 'charttime'], inplace=True)
-        global_means = X[self.NUMERICAL_FEATURES].mean()
-        print(f'global means {global_means}')
+    def impute_with_ffill_bfill(self, df):
+        df.sort_values(['stay_id', 'charttime'], inplace=True)
         for num_feature in self.SEQUENCE_FEATURES:
-            X[num_feature] = X.groupby('stay_id')[num_feature].ffill()
-            X[num_feature] = X.groupby('stay_id')[num_feature].bfill()
+            df[num_feature] = df.groupby('stay_id')[num_feature].ffill()
+            df[num_feature] = df.groupby('stay_id')[num_feature].bfill()
 
-        # mean imputation for features without any vals 
-        X[self.NUMERICAL_FEATURES] = X[self.NUMERICAL_FEATURES].fillna(global_means)
 
+
+        
+        
+    #     stay_ids_to_drop = X.groupby('stay_id')[self.NUMERICAL_FEATURES].apply(
+    #         lambda group: group.isnull().all(axis=0).any()
+    #     )
+    #     stay_ids_to_drop = stay_ids_to_drop[stay_ids_to_drop].index
+
+    #     print(f"Number of MIMIC observations before dropping: {len(X)}")
+
+    #     #DROP
+    #    # X = X[~X['stay_id'].isin(stay_ids_to_drop)]
+    #     print(f"Number of MIMIC observations after dropping: {len(X)}")
+    #     # # Use KNN imputation for features without any values
+    #     # features_to_impute = self.NUMERICAL_FEATURES
+    #     # print('starting knn imputation as part of ffill_bfill')
+    #     # knn_imputer = KNNImputer(n_neighbors=4)
+    #     # X[features_to_impute] = knn_imputer.fit_transform(X[features_to_impute])
+    #     # print('knn imputation done')
+    #     # for cat_feature in self.CAT_FEATURES:
+    #     #     X[cat_feature].fillna(X[cat_feature].mode()[0], inplace=True)
+        return df
+ 
+    def impute_with_knn(self, X):
+        print("Starting KNN imputation...")
+        
+        features_to_impute = self.NUMERICAL_FEATURES # + self.CAT_FEATURES
+        
+        knn_imputer = KNNImputer(n_neighbors=self.imputation['n_neighbors'])
+
+        X[features_to_impute] = knn_imputer.fit_transform(X[features_to_impute])
+        
         for cat_feature in self.CAT_FEATURES:
             X[cat_feature].fillna(X[cat_feature].mode()[0], inplace=True)
-
-
-    def impute_with_knn(self, X):
-        knn_imputer = KNNImputer(n_neighbors=5) 
-        X[self.NUMERICAL_FEATURES] = knn_imputer.fit_transform(X[self.NUMERICAL_FEATURES])
+        print("KNN imputation done.")
+        return X
+        
 
     def find_variables_with_only_nan(self, X):
         """
         Prints the number of stay_id's that have only NaN values for each variable (feature).
         """
+        df = X.copy()
         variables_with_nan_count = {}
-
-        for feature in X.columns:
-            stay_ids_with_nan = X.groupby('stay_id')[feature].apply(lambda group: group.isnull().all()).sum()
+       
+        for feature in df.columns:
+            stay_ids_with_nan = df.groupby('stay_id')[feature].apply(lambda group: group.isnull().all()).sum()
 
             if stay_ids_with_nan > 0:
                 variables_with_nan_count[feature] = stay_ids_with_nan
-
         if variables_with_nan_count:
             print("Variables with the number of stay_ids that have only NaN values:")
             for variable, count in variables_with_nan_count.items():
@@ -237,7 +294,7 @@ class Preprocessor:
         else:
             print("No variables have only NaN values across any stay_id.")
 
-        return variables_with_nan_count
+        #return variables_with_nan_count
     
     def generate_fractions(self):
         print('Generating fractional datasets...')
@@ -267,7 +324,7 @@ class Preprocessor:
         self.sequence_dict['fractional_mimic_tudd'] = fractional_datasets
 
     def plot_density(self, mimic_df, tudd_df, features):
-    
+
         for feature in features:
             plt.figure(figsize=(10, 6))
             sns.kdeplot(mimic_df[feature].dropna(), label='MIMIC', fill=True, alpha=0.5)
@@ -279,7 +336,7 @@ class Preprocessor:
             plt.show()
             print(f"Mean {feature} MIMIC: {mimic_df[feature].mean()}")
             print(f"Mean {feature} TUDD: {tudd_df[feature].mean()}")
-
+      
     def process_tudd(self):
         measurements = self.data['tudd']['measurements']
         mortality_info = self.data['tudd']['mortality_info']
@@ -289,7 +346,7 @@ class Preprocessor:
         'potassium_value', 'wbc_value', 'platelets_value', 'inr_value', 
         'anion_gap_value', 'lactate_value', 'temperature_value', 'weight_value'
         ]
-        self.NUMERICAL_FEATURES = self.SEQUENCE_FEATURES + ['age', 'height_value']
+        self.NUMERICAL_FEATURES = self.SEQUENCE_FEATURES + ['age']#, 'height_value']
         self.CAT_FEATURES = ['gender']
         self.ALL_FEATURES = self.NUMERICAL_FEATURES + self.CAT_FEATURES
 
@@ -297,11 +354,12 @@ class Preprocessor:
 
         measurements = pd.merge(
             measurements,
-            mortality_info[['caseid','stay_duration', 'age', 'gender', 'bodyheight', 'bodyweight', 'exitus']],
+            mortality_info[['caseid','stay_duration', 'age', 'gender',  'bodyweight', 'exitus']], #'bodyheight',
             on='caseid',
             how='left'
         )
-
+        measurements.rename(columns={'caseid': 'stay_id'}, inplace=True)
+        mortality_info.rename(columns={'caseid': 'stay_id'}, inplace=True)
         measurements['stay_duration_hours'] = measurements['stay_duration'] * 24
         measurements['measurement_time_from_admission'] = measurements['stay_duration_hours'] + measurements['measurement_offset']
 
@@ -316,33 +374,34 @@ class Preprocessor:
 
         # aggregate
         measurements['value'] = pd.to_numeric(measurements['value'], errors='coerce')
-        measurements_agg = measurements.groupby(['caseid', 'measurement_time_from_admission', 'treatmentname'])['value'].mean().reset_index()
+        measurements_agg = measurements.groupby(['stay_id', 'measurement_time_from_admission', 'treatmentname'])['value'].mean().reset_index()
 
         # pivot
         measurements_pivot = measurements_agg.pivot_table(
-            index=['caseid', 'measurement_time_from_admission'],
+            index=['stay_id', 'measurement_time_from_admission'],
             columns='treatmentname',
             values='value'
         ).reset_index()
 
+    
         # make time grid
         def create_time_grid(mortality_info):
             df_list = []
             for _, row in mortality_info.iterrows():
-                caseid = row['caseid']
+                stay_id = row['stay_id']
                 time_range = np.arange(0, 25)  # hour 0 to 24 inclusive
-                time_df = pd.DataFrame({'caseid': caseid, 'measurement_time_from_admission': time_range})
+                time_df = pd.DataFrame({'stay_id': stay_id, 'measurement_time_from_admission': time_range})
                 df_list.append(time_df)
             return pd.concat(df_list, ignore_index=True)
 
         time_grid = create_time_grid(mortality_info)
 
         # merg on time grid
-        merged_df = pd.merge(time_grid, measurements_pivot, on=['caseid', 'measurement_time_from_admission'], how='left')
+        merged_df = pd.merge(time_grid, measurements_pivot, on=['stay_id', 'measurement_time_from_admission'], how='left')
         merged_df = pd.merge(
             merged_df,
-            mortality_info[['caseid', 'age', 'gender', 'bodyheight', 'bodyweight', 'exitus']],
-            on='caseid',
+            mortality_info[['stay_id', 'age', 'gender', 'bodyweight', 'exitus']], # 'bodyheight', 
+            on='stay_id',
             how='left'
         )
 
@@ -352,18 +411,26 @@ class Preprocessor:
             'CREA': 'creatinine_value', 'K': 'potassium_value', 'LEU': 'wbc_value',
             'THR': 'platelets_value', 'Q': 'inr_value', 'LAC': 'lactate_value',
             'T': 'temperature_value', 'GCS': 'gcs_total_value', 'MAP': 'mbp_value',
-            'bodyweight': 'weight_value', 'bodyheight': 'height_value'
+            'bodyweight': 'weight_value'#, 'bodyheight': 'height_value'
         }
         merged_df.rename(columns=treatmentnames_mapping, inplace=True)
 
         # bounds 
         bounds = {
-            'age': (18, 90), 'weight_value': (20, 500), 'height_value': (20, 260),
+            'age': (18, 90), 'weight_value': (20, 500), #'height_value': (20, 260),
             'temperature_value': (20, 45), 'hr_value': (10, 300), 'glc_value': (5, 2000),
             'mbp_value': (20, 400), 'potassium_value': (2.5, 7), 'wbc_value': (1, 200),
             'platelets_value': (10, 1000), 'inr_value': (0.2, 6), 'anion_gap_value': (1, 25),
             'lactate_value': (0.1, 200), 'creatinine_value': (0.1, 20)
         }
+
+        if self.parameters['small_data']:
+            fraction = 0.1
+            patient_sample = merged_df[['stay_id', 'exitus']].drop_duplicates().groupby('exitus', group_keys=False).apply(
+                lambda x: x.sample(frac=fraction, random_state=42)
+            )
+            sampled_df = merged_df[merged_df['stay_id'].isin(patient_sample['stay_id'])]
+            merged_df = sampled_df
 
         # mean before conversion
         print("Mean before conversion:")
@@ -397,62 +464,109 @@ class Preprocessor:
             if feature in merged_df.columns:
                 merged_df.loc[merged_df[feature] < lower, feature] = np.nan
                 merged_df.loc[merged_df[feature] > upper, feature] = np.nan
+        merged_df['gender'] = merged_df['gender'].map({'m': 0, 'w': 1})
         if self.compare_distributions:
             self.plot_dict['tudd'] = merged_df
+
+        if self.parameters['golden_tudd']:
+            target_proportion_before = merged_df['exitus'].mean()
+            print(f"Proportion of target before dropping: {target_proportion_before}")
+
+            missing_counts = merged_df.groupby('stay_id')[self.ALL_FEATURES].apply(lambda x: x.isnull().sum().sum()) # total missing across all vars
+            missing_counts = missing_counts.sort_values() # sort from least to most
+            top_1000_stay_ids = missing_counts.index[:1000]
+            merged_df = merged_df[merged_df['stay_id'].isin(top_1000_stay_ids)] 
+
+            target_proportion_after = merged_df['exitus'].mean()
+            print(f"Proportion of target after dropping: {target_proportion_after}")
+
+            
+            if merged_df['stay_id'].nunique() != 1000:
+                raise ValueError(f"Expected 1000 unique stay_ids, but got {merged_df['stay_id'].nunique()}.")
+           
+        
+
         # imputation
-        merged_df.sort_values(['caseid', 'measurement_time_from_admission'], inplace=True)
-        merged_df = merged_df.groupby('caseid').apply(lambda group: group.ffill().bfill()).reset_index(drop=True)
+        #merged_df.sort_values(['stay_id', 'measurement_time_from_admission'], inplace=True)
+        merged_df = self.impute(merged_df)
+        # if self.imputation['method'] == 'ffill_bfill':
+        #     merged_df = merged_df.groupby('caseid').apply(lambda group: group.ffill().bfill()).reset_index(drop=True)
+            
+        #     self.find_variables_with_only_nan(merged_df)
+        
 
-        global_means = merged_df[self.NUMERICAL_FEATURES].mean()
-        merged_df[self.NUMERICAL_FEATURES] = merged_df[self.NUMERICAL_FEATURES].fillna(global_means)
+        #     stay_ids_to_drop = merged_df.groupby('caseid')[self.NUMERICAL_FEATURES].apply(
+        #     lambda group: group.isnull().all(axis=0).any()
+        # )
+        #     stay_ids_to_drop = stay_ids_to_drop[stay_ids_to_drop].index
 
+        #     print(f"Number of TUDD observations before dropping: {len(merged_df)}")
+        #     #merged_df = merged_df[~merged_df['caseid'].isin(stay_ids_to_drop)]
+        #     print(f"Number of TUDD observations left after dropping: {len(merged_df)}")
+
+        # elif self.imputation['method'] == 'knn':
+        #     merged_df = self.impute_with_knn(merged_df)
+
+
+      
+        if self.compare_distributions:
+            self.plot_dict['tudd_imputed'] = merged_df.copy()
         # categorical features 
-        merged_df['gender'] = merged_df['gender'].map({'m': 0, 'w': 1})
         merged_df['gender'].fillna(merged_df['gender'].mode()[0], inplace=True)
         merged_df['exitus'].fillna(0, inplace=True)
 
-        scaler = StandardScaler()
-        merged_df[self.NUMERICAL_FEATURES] = scaler.fit_transform(merged_df[self.NUMERICAL_FEATURES])
+        if self.parameters['scaling'] == 'standard':
+            #scaler = StandardScaler()
+            merged_df[self.MIMIC_NUMERICAL_FEATURES] = self.mimic_scaler.transform(merged_df[self.MIMIC_NUMERICAL_FEATURES])
+        elif self.parameters['scaling'] == 'MinMax':
+            #scaler = MinMaxScaler(feature_range=(self.parameters['scaling_range'][0], self.parameters['scaling_range'][1]))
+            merged_df[self.MIMIC_NUMERICAL_FEATURES] = self.mimic_scaler.transform(merged_df[self.MIMIC_NUMERICAL_FEATURES])
 
+        # column_order = [
+        #     'caseid', 'measurement_time_from_admission', 'mbp_value', 'gcs_total_value', 'glc_value',
+        #     'creatinine_value', 'potassium_value', 'hr_value', 'wbc_value', 'platelets_value',
+        #     'lactate_value','temperature_value','weight_value', 'inr_value', 'anion_gap_value', 'exitus',   
+        #     'age', 'gender', 'height_value'
+        # ]
         column_order = [
-            'caseid', 'measurement_time_from_admission', 'mbp_value', 'gcs_total_value', 'glc_value',
-            'creatinine_value', 'potassium_value', 'hr_value', 'wbc_value', 'platelets_value',
-            'lactate_value','temperature_value','weight_value', 'inr_value', 'anion_gap_value', 'exitus',   
-            'age', 'gender', 'height_value'
-        ]
+             'stay_id', 'measurement_time_from_admission', 'mbp_value', 'gcs_total_value', 'glc_value',
+             'creatinine_value', 'potassium_value', 'hr_value', 'wbc_value', 'platelets_value',
+             'temperature_value','weight_value', 'exitus',   
+             'age', 'gender'
+         ]
         sorted_merged_df = merged_df[column_order]
         
-        # drop 'anion_gap_value'
-        sorted_merged_df.drop(columns=['anion_gap_value'], inplace=True)
-        self.SEQUENCE_FEATURES.remove('anion_gap_value')
-        self.NUMERICAL_FEATURES.remove('anion_gap_value')
-        self.ALL_FEATURES.remove('anion_gap_value')
+        # # drop 'anion_gap_value'
+        # sorted_merged_df.drop(columns=['anion_gap_value'], inplace=True)
+        # self.SEQUENCE_FEATURES.remove('anion_gap_value')
+        # self.NUMERICAL_FEATURES.remove('anion_gap_value')
+        # self.ALL_FEATURES.remove('anion_gap_value')
 
-        # drop 'inr_value'
-        sorted_merged_df.drop(columns=['inr_value'], inplace=True)
-        self.SEQUENCE_FEATURES.remove('inr_value')
-        self.NUMERICAL_FEATURES.remove('inr_value')
-        self.ALL_FEATURES.remove('inr_value')
+        # # drop 'inr_value'
+        # sorted_merged_df.drop(columns=['inr_value'], inplace=True)
+        # self.SEQUENCE_FEATURES.remove('inr_value')
+        # self.NUMERICAL_FEATURES.remove('inr_value')
+        # self.ALL_FEATURES.remove('inr_value')
 
-        # drop lactate_value
-        sorted_merged_df.drop(columns=['lactate_value'], inplace=True)
-        self.SEQUENCE_FEATURES.remove('lactate_value')
-        self.NUMERICAL_FEATURES.remove('lactate_value')
-        self.ALL_FEATURES.remove('lactate_value')
+        # # drop lactate_value
+        # sorted_merged_df.drop(columns=['lactate_value'], inplace=True)
+        # self.SEQUENCE_FEATURES.remove('lactate_value')
+        # self.NUMERICAL_FEATURES.remove('lactate_value')
+        # self.ALL_FEATURES.remove('lactate_value')
 
-        print(f'TUDD features: {sorted_merged_df.columns}')
-        print(f'n_TUDD: {len(sorted_merged_df.columns)}')
-        print(sorted_merged_df.describe())
+
 
         sequences = []
-        for caseid, group in sorted_merged_df.groupby('caseid'):
+        for stay_id, group in sorted_merged_df.groupby('stay_id'):
             if len(group) == 25:
-                features = group[['mbp_value', 'gcs_total_value', 'glc_value', 'creatinine_value', 'potassium_value', 'hr_value', 'wbc_value', 'platelets_value', 'temperature_value', 'weight_value', 'age', 'gender']].values
+                features = group[self.ALL_FEATURES_MIMIC].values
                 label = group['exitus'].iloc[0]
                 sequences.append((features, label))
-        print(f'length TUDD ALL FEATURES: {len(self.ALL_FEATURES)}')
-        print(self.ALL_FEATURES)
-        labels = [seq[1] for seq in sequences]
+
         self.sequence_dict['tudd'] = {}
-        self.sequence_dict['tudd']['train'], self.sequence_dict['tudd']['test'] = train_test_split(sequences, test_size=0.2, stratify=labels, random_state=42)
-        print(self.sequence_dict['tudd']['test'][0][0].shape)
+        if self.parameters.get('golden_tudd', False):
+            self.sequence_dict['tudd']['test'] = sequences
+            self.sequence_dict['tudd']['train'] = []
+        else:
+            labels = [seq[1] for seq in sequences]
+            self.sequence_dict['tudd']['train'], self.sequence_dict['tudd']['test'] = train_test_split(sequences, test_size=0.2, stratify=labels, random_state=42)
