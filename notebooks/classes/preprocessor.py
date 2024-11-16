@@ -8,6 +8,7 @@ from utils import set_seed
 import matplotlib.pyplot as plt
 import seaborn as sns
 import random
+from collections import Counter
 
 set_seed(42)
 
@@ -78,13 +79,11 @@ class Preprocessor:
         self.create_time_grid()
         self.merge_on_time_grid()
         self.impute()
-
-        # no sampling for now because that was wrong
-        if self.parameters.get("sampling", False):
-            self.sample()
         self.scale_normalize()
         self.create_sequences()
         self.split_train_test_sequences()
+        if self.parameters.get("sampling", False):
+            self.sample()
 
     def variable_conversion_and_aggregation(self):
         """
@@ -295,55 +294,8 @@ class Preprocessor:
             print(f"{feature}: {count} stay_id(s) with no observaions")
             print(f"{percentage:.2f}% of total stayids")
 
-    def sample(self):
-        """
-        samples the data based on a specified method and sampling strategy
-        """
-        print("sampling...")
-        df = self.data_process["imputed"].copy()
-        method = self.parameters["sampling"]["method"]
-        if method == "undersampling":
-            stayid_target = df[
-                ["stay_id", f'{self.parameters["target"]}_value']
-            ].drop_duplicates()
-
-            # print the percentage of positive targets before sampling
-            total_before = len(stayid_target)
-            positive_before = (
-                stayid_target[f"{self.parameters['target']}_value"] == 1
-            ).sum()
-            positive_percentage_before = (positive_before / total_before) * 100
-            print(f"Postive Targets before sampling: {positive_percentage_before:.2f}%")
-
-            # sampling
-            undersampler = RandomUnderSampler(
-                random_state=42,
-                sampling_strategy=self.parameters["sampling"]["sampling_strategy"],
-            )
-            stayid_undersampled, _ = undersampler.fit_resample(
-                stayid_target[["stay_id"]],
-                stayid_target[f'{self.parameters["target"]}_value'],
-            )
-
-            df_undersampled = df[df["stay_id"].isin(stayid_undersampled["stay_id"])]
-            self.data_process["sampled"] = df_undersampled
-
-            # print the percentage of positive targets after sampling
-            sampled_targets = stayid_target[
-                stayid_target["stay_id"].isin(stayid_undersampled["stay_id"])
-            ]
-            total_after = len(sampled_targets)
-            positive_after = (
-                sampled_targets[f"{self.parameters['target']}_value"] == 1
-            ).sum()
-            positive_percentage_after = (positive_after / total_after) * 100
-            print(f"Postive Targets before sampling: {positive_percentage_after:.2f}%")
-
     def scale_normalize(self):
-        if self.parameters.get("sampling", False):
-            df = self.data_process["sampled"].copy()
-        else:
-            df = self.data_process["imputed"].copy()
+        df = self.data_process["imputed"].copy()
 
         if self.parameters["scaling"] == "Standard":
             print("scaling with StandardScaler...")
@@ -397,6 +349,63 @@ class Preprocessor:
         )
         self.data_process["sequences_train"] = sequence_dict["train"]
         self.data_process["sequences_test"] = sequence_dict["test"]
+        print(self.data_process["sequences_train"][0])
+
+    def sample(self):
+        """
+        samling sequences according to the sampling method
+        """
+        print("sampling...")
+        sequences = self.data_process["sequences_train"]
+        labels = [seq[1] for seq in sequences]
+        method = self.parameters["sampling"]["method"]
+        if method == "undersampling":
+            sampling_strategy = self.parameters["sampling"]["sampling_strategy"]
+
+            # print positive class percentage before sampling
+            counter = Counter(labels)
+            total_before = len(labels)
+            positive_before = counter[1]
+            positive_percentage_before = (positive_before / total_before) * 100
+            print(
+                f"Positive Targets before sampling: {positive_percentage_before:.2f}%"
+            )
+
+            maj_class = max(counter, key=counter.get)
+            min_class = min(counter, key=counter.get)
+            n_samples = {
+                maj_class: int(counter[min_class] / sampling_strategy),
+                min_class: counter[min_class],
+            }
+
+            # sample sequences according to n_samples
+            sampled_sequences = []
+            class_indices = {label: [] for label in counter.keys()}
+            for idx, seq in enumerate(sequences):
+                class_indices[seq[1]].append(idx)
+            for class_label in counter.keys():
+                indices = class_indices[class_label]
+                if class_label in n_samples:
+                    n = n_samples[class_label]
+                else:
+                    n = len(indices)
+                if len(indices) > n:
+                    sampled_indices = random.sample(indices, n)
+                else:
+                    sampled_indices = indices
+                sampled_sequences.extend([sequences[i] for i in sampled_indices])
+            random.shuffle(sampled_sequences)
+
+            # update train sequences
+            self.data_process["sequences_train"] = sampled_sequences
+
+            # print positive class percentage after sampling
+            labels_after = [seq[1] for seq in sampled_sequences]
+            counter_after = Counter(labels_after)
+            total_after = len(labels_after)
+            positive_after = counter_after[1]
+            positive_percentage_after = (positive_after / total_after) * 100
+            print(f"Positive Targets after sampling: {positive_percentage_after:.2f}%")
 
     #     stay_ids_to_drop = X.groupby('stay_id')[self.NUMERICAL_FEATURES].apply(
     #         lambda group: group.isnull().all(axis=0).any()

@@ -63,21 +63,21 @@ parameters = {
     "golden_tudd": False,
     #'dataset_type': 'mimic_tudd_fract',
     #'fractional_steps': 1000, # example for mimic_tudd: adds 1000 samples from tudd train to the training set of mimic for every fraction
-    "small_data": False,  # not implemented for tudd yet
+    "small_data": True,  # not implemented for tudd yet
     "aggregation_frequency": "H",
     "imputation": {
         "method": "ffill_bfill"
     },  # , 'n_neighbors': 3}, # ffilll uses mean for features without any values
     "sampling": {
         "method": "undersampling",
-        "sampling_strategy": 0.1,
+        "sampling_strategy": 0.4,
     },  # minority / majority class = sampling streategy
     "scaling": "Standard",  # Standard and MinMax implemented, also try Robust
     #'scaling_range': [0, 1],
     #'n_features': n_features,
     "n_features": n_features,
-    "models": ["lstm"],
-    #'models': ['multi_channel_lstm'],
+    # "models": ["lstm"],
+    "models": ["multi_channel_lstm"],
     #'models': ['cnn_lstm'],
     #'models': ['attention_lstm'],
     "compare_distributions": False,
