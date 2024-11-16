@@ -17,7 +17,9 @@ class Pipeline (object):
         DataManager = DatasetManager(variables=self.variables, parameters=self.parameters)
         DataManager.load_data()
         self.sequences = DataManager.data['sequences']
-        self.feature_index_mapping = DataManager.feature_index_mapping # generated from mimic df in preprocessor
+        print(self.sequences.keys())
+        self.feature_index_mapping_mimic = DataManager.feature_index_mapping_mimic
+        self.feature_index_mapping_tudd = DataManager.feature_index_mapping_tudd
 
         # if self.show:
         #     seq, label = self.sequences['train'][0]

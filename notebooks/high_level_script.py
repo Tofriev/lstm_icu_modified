@@ -60,10 +60,10 @@ parameters = {
     #'dataset_type': 'mimic_mimic',
     #'dataset_type': 'tudd_mimic',
     'dataset_type': 'mimic_tudd',
-    'golden_tudd': True,
+    'golden_tudd': False,
     #'dataset_type': 'mimic_tudd_fract',
     #'fractional_steps': 1000, # example for mimic_tudd: adds 1000 samples from tudd train to the training set of mimic for every fraction
-    'small_data': False, # not implemented for tudd yet 
+    'small_data': True, # not implemented for tudd yet 
     'aggregation_frequency': 'H',
     'imputation': {'method': 'ffill_bfill'},#, 'n_neighbors': 3}, # ffilll uses mean for features without any values
     'sampling': {'method': 'undersampling', 'sampling_strategy': 0.1}, #minority / majority class = sampling streategy
@@ -75,7 +75,7 @@ parameters = {
     #'models': ['multi_channel_lstm'],
     #'models': ['cnn_lstm'],
     #'models': ['attention_lstm'],
-    'compare_distributions': True,
+    'compare_distributions': False,
     'shuffle': True,
     
 
@@ -90,7 +90,7 @@ parameters = {
             'weight_decay': 1e-5,
             'class_weights': [1.0, 3.0],
             'batch_size': 32,
-            'n_epochs': 6,
+            'n_epochs': 3,
             'gradient_clip_val': 1,
         }, 
         'multi_channel_lstm': {
@@ -146,8 +146,7 @@ parameters = {
 #%%
 pipe = Pipeline(variables=variables, parameters=parameters, show=True)
 pipe.prepare_data()
-print(pipe.feature_index_mapping)
-pipe.visualize_sequences()
+#pipe.visualize_sequences()
 pipe.train()
 pipe.memorize()
 
@@ -155,7 +154,7 @@ print(pipe.result_dict)
 
 
 
-#%%
+ #%%
 # only for fractional learning: use cell above otherwise
 model_names = ['attention_lstm']
 #model_names = ['lstm', 'multi_channel_lstm', 'cnn_lstm', 'attention_lstm']

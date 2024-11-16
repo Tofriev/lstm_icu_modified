@@ -12,10 +12,12 @@ import random
 set_seed(42)
 
 class Preprocessor:
-    def __init__(self, data, variables, parameters):
+    def __init__(self, data, variables, parameters, mimic_scaler=None, ALL_FEATURES_MIMIC=None):
         self.data = data
         self.variables = variables
         self.parameters = parameters
+        self.mimic_scaler = mimic_scaler
+        self.ALL_FEATURES_MIMIC = ALL_FEATURES_MIMIC
         self.aggregation_freq = self.parameters.get('aggregation_frequency', 'H')
         self.imputation = self.parameters['imputation']
         if self.imputation['method'] == 'knn':
@@ -26,19 +28,25 @@ class Preprocessor:
         self.shuffle = self.parameters.get('shuffle', False)
 
     def process(self):
-        if self.parameters['dataset_type'] == 'tudd_tudd':
-            print('Processing TUDD data...')
-            self.process_tudd()
-        elif self.parameters['dataset_type'] == 'mimic_mimic':
+        sequences_dict = {}
+
+        if 'mimic' in self.data:
             print('Processing MIMIC data...')
             self.process_mimic()
-        elif self.parameters['dataset_type'] == 'mimic_tudd' or self.parameters['dataset_type'] == 'tudd_mimic':
-            print('Processing MIMIC data...')
-            self.process_mimic()
+            sequences_dict['mimic'] = self.sequence_dict['mimic']
+            self.feature_index_mapping = {index: feature for index, feature in enumerate(self.ALL_FEATURES)}
+
+        if 'tudd' in self.data:
             print('Processing TUDD data...')
             self.process_tudd()
+            sequences_dict['tudd'] = self.sequence_dict['tudd']
+            self.feature_index_mapping = {index: feature for index, feature in enumerate(self.ALL_FEATURES)}
+
         if self.parameters.get('fractional_steps') and self.parameters['dataset_type'] == 'mimic_tudd_fract':
             self.generate_fractions()
+
+
+
         if self.compare_distributions:
             if 'tudd' in self.parameters['dataset_type'] and 'mimic' in self.parameters['dataset_type']:
                 mimic_df = self.plot_dict['mimic']
@@ -66,6 +74,7 @@ class Preprocessor:
             self.sample()
         self.scale_normalize()
         self.check()
+
         self.create_sequences()
         self.split_train_test_sequences()
 
@@ -194,6 +203,7 @@ class Preprocessor:
             print("All stay IDs have 25 rows.")
 
     def create_sequences(self):
+        print(f"Number of unique stay_ids: {self.merged_df['stay_id'].nunique()}")
         print(f'MIMIC features: {self.merged_df.columns}')  
         print(f'n_MIMIC: {len(self.merged_df.columns)}')
         print(self.merged_df.describe())
@@ -414,7 +424,7 @@ class Preprocessor:
             'bodyweight': 'weight_value'#, 'bodyheight': 'height_value'
         }
         merged_df.rename(columns=treatmentnames_mapping, inplace=True)
-
+        print(f'number of unique stay_ids before renaming and bounding: {merged_df["stay_id"].nunique()}')
         # bounds 
         bounds = {
             'age': (18, 90), 'weight_value': (20, 500), #'height_value': (20, 260),
@@ -423,14 +433,14 @@ class Preprocessor:
             'platelets_value': (10, 1000), 'inr_value': (0.2, 6), 'anion_gap_value': (1, 25),
             'lactate_value': (0.1, 200), 'creatinine_value': (0.1, 20)
         }
-
-        if self.parameters['small_data']:
-            fraction = 0.1
-            patient_sample = merged_df[['stay_id', 'exitus']].drop_duplicates().groupby('exitus', group_keys=False).apply(
-                lambda x: x.sample(frac=fraction, random_state=42)
-            )
-            sampled_df = merged_df[merged_df['stay_id'].isin(patient_sample['stay_id'])]
-            merged_df = sampled_df
+        print(f'number of unique stay_ids after bounding: {merged_df["stay_id"].nunique()}')
+        # if self.parameters['small_data']:
+        #     fraction = 0.1
+        #     patient_sample = merged_df[['stay_id', 'exitus']].drop_duplicates().groupby('exitus', group_keys=False).apply(
+        #         lambda x: x.sample(frac=fraction, random_state=42)
+        #     )
+        #     sampled_df = merged_df[merged_df['stay_id'].isin(patient_sample['stay_id'])]
+        #     merged_df = sampled_df
 
         # mean before conversion
         print("Mean before conversion:")
@@ -455,7 +465,7 @@ class Preprocessor:
         # convert lactate mmol/L to mg/dL
         # merged_df['lactate_value'] = merged_df['lactate_value'] * 9.01
         # print(f"Lactate conversion done: {merged_df['lactate_value'].mean()} mg/dL")
-
+        print(f'number of unique stay_ids before filtering: {merged_df["stay_id"].nunique()}')
         # filter
         merged_df = merged_df[merged_df['age'] >= 18]
         merged_df['age'] = merged_df['age'].apply(lambda x: min(x, 90))
@@ -485,7 +495,7 @@ class Preprocessor:
                 raise ValueError(f"Expected 1000 unique stay_ids, but got {merged_df['stay_id'].nunique()}.")
            
         
-
+        print(f'number of unique stay_ids before iumputing: {merged_df["stay_id"].nunique()}')
         # imputation
         #merged_df.sort_values(['stay_id', 'measurement_time_from_admission'], inplace=True)
         merged_df = self.impute(merged_df)
@@ -554,7 +564,7 @@ class Preprocessor:
         # self.NUMERICAL_FEATURES.remove('lactate_value')
         # self.ALL_FEATURES.remove('lactate_value')
 
-
+        print(f"Number of unique stay_ids: {sorted_merged_df['stay_id'].nunique()}")
 
         sequences = []
         for stay_id, group in sorted_merged_df.groupby('stay_id'):
@@ -564,7 +574,7 @@ class Preprocessor:
                 sequences.append((features, label))
 
         self.sequence_dict['tudd'] = {}
-        if self.parameters.get('golden_tudd', False):
+        if self.parameters['golden_tudd']:
             self.sequence_dict['tudd']['test'] = sequences
             self.sequence_dict['tudd']['train'] = []
         else:

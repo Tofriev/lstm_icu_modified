@@ -27,26 +27,55 @@ class DatasetManager:
         self.data = {}
 
     def load_data(self):
-        if self.dataset_type == 'mimic_mimic':
+        if 'mimic' in self.dataset_type:
             self.data['mimic'] = {}
             self.load_mimic()
-        elif self.dataset_type == 'tudd_tudd':
+            if self.parameters.get('small_data', False):
+                self.reduce_data()
+            self.data['sequences'], self.feature_index_mapping_mimic = self.preprocess()
+        if 'tudd' in self.dataset_type:
             self.data['tudd'] = {}
             self.load_tudd()
-        elif self.dataset_type == 'mimic_tudd' or self.dataset_type == 'tudd_mimic' or self.dataset_type == 'mimic_tudd_fract':
-            self.data['tudd'] = {}
-            self.data['mimic'] = {}
-            self.load_mimic()
-            self.load_tudd()
-        if self.parameters.get('small_data', False):
-            self.reduce_data()
-        self.data['sequences'], self.feature_index_mapping = self.preprocess()
+            self.data['sequences'], self.feature_index_mapping_tudd = self.preprocess()
+       
+        if hasattr(self, 'feature_index_mapping_mimic') and hasattr(self, 'feature_index_mapping_tudd'):
+            if self.feature_index_mapping_mimic != self.feature_index_mapping_tudd:
+                print("Warning: Feature index mappings for MIMIC and TUDD datasets do not match.")
+                print(self.feature_index_mapping_mimic)
+                print(self.feature_index_mapping_tudd)
 
-    def preprocess(self):
-        preprocessor = Preprocessor(self.data, self.variables, self.parameters)
-        sequences = preprocessor.process()
-        return sequences
         
+
+    
+    def preprocess(self):
+        sequences_dict = {}
+        feature_index_mapping = {}
+        
+        if 'mimic' in self.data:
+            preprocessor_mimic = Preprocessor(
+                {'mimic': self.data['mimic']},
+                self.variables,
+                self.parameters
+            )
+            sequences_mimic, feature_index_mapping_mimic = preprocessor_mimic.process()
+            sequences_dict.update(sequences_mimic)
+            mimic_scaler = preprocessor_mimic.mimic_scaler
+            ALL_FEATURES_MIMIC = preprocessor_mimic.ALL_FEATURES_MIMIC
+            feature_index_mapping.update(feature_index_mapping_mimic)
+        
+        if 'tudd' in self.data:
+            preprocessor_tudd = Preprocessor(
+                {'tudd': self.data['tudd']},
+                self.variables,
+                self.parameters,
+                mimic_scaler,
+                ALL_FEATURES_MIMIC
+            )
+            sequences_tudd, feature_index_mapping_tudd = preprocessor_tudd.process()
+            sequences_dict.update(sequences_tudd)
+            feature_index_mapping.update(feature_index_mapping_tudd)
+
+        return sequences_dict, feature_index_mapping
 
     def load_mimic(self):
         for variable, _ in self.variables.items():
@@ -82,7 +111,7 @@ class DatasetManager:
 
         self.data['tudd']['mortality_info'] = pd.concat(mortality_info_list, ignore_index=True)
 
-    def reduce_data(self):
+    def reduce_data(self): # TODO not implemented for tudd yet and also fot mimic_tudd
         if self.dataset_type == 'mimic_mimic':
             static = self.data['mimic']['static_data']
             static_small = train_test_split(static, test_size=0.9, stratify=static[self.parameters['target']])[0]
