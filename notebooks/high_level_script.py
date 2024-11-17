@@ -15,17 +15,20 @@ variables = {
     "mbp": {"type": "numerical", "training": True},  # Mean Blood Pressure
     "gcs_total": {"type": "numerical", "training": True},  # Glasgow Coma Scale Total
     "glc": {"type": "numerical", "training": True},  # Glucose levels
-    #'resprate_mortality': {'type': 'numerical', 'training': True},  # Respiratory Rate
+    # "resprate_mortality": {"type": "numerical", "training": True},  # Respiratory Rate TODO: extract resprate. we dont need mortality here anymore
     "creatinine": {"type": "numerical", "training": True},  # Creatinine levels
     "potassium": {"type": "numerical", "training": True},  # Potassium levels
     "hr": {"type": "numerical", "training": True},  # Heart Rate
-    #'sodium': {'type': 'numerical', 'training': True},          # Sodium levels
+    "sodium": {"type": "numerical", "training": True},  # Sodium levels
     "wbc": {"type": "numerical", "training": True},  # White Blood Cells (leukocytes)
     "platelets": {"type": "numerical", "training": True},  # Platelets (thrombocytes)
-    #'inr': {'type': 'numerical', 'training': True},             # International Normalized Ratio (Prothrombin Time)
-    #'anion_gap': {'type': 'numerical', 'training': True},       # Anion Gap
-    #'lactate': {'type': 'numerical', 'training': True},         # Lactate levels
-    #'urea': {'type': 'numerical', 'training': True},            # Urea levels
+    "inr": {
+        "type": "numerical",
+        "training": True,
+    },  # International Normalized Ratio (Prothrombin Time)
+    "anion_gap": {"type": "numerical", "training": True},  # Anion Gap
+    "lactate": {"type": "numerical", "training": True},  # Lactate levels
+    "urea": {"type": "numerical", "training": True},  # Urea levels
     "temperature": {"type": "numerical", "training": True},  # Body Temperature
     "weight": {"type": "numerical", "training": True},  # Weight over time (time series)
     "static_data": {
@@ -63,22 +66,18 @@ parameters = {
     "golden_tudd": False,
     #'dataset_type': 'mimic_tudd_fract',
     #'fractional_steps': 1000, # example for mimic_tudd: adds 1000 samples from tudd train to the training set of mimic for every fraction
-    "small_data": True,  # not implemented for tudd yet
+    "small_data": False,  # not implemented for tudd yet
     "aggregation_frequency": "H",
     "imputation": {
         "method": "ffill_bfill"
     },  # , 'n_neighbors': 3}, # ffilll uses mean for features without any values
-    "sampling": {
-        "method": "undersampling",
-        "sampling_strategy": 0.4,
-    },  # minority / majority class = sampling streategy
     "scaling": "Standard",  # Standard and MinMax implemented, also try Robust
     #'scaling_range': [0, 1],
     #'n_features': n_features,
     "n_features": n_features,
-    # "models": ["lstm"],
-    "models": ["multi_channel_lstm"],
-    #'models': ['cnn_lstm'],
+    "models": ["lstm"],
+    # "models": ["multi_channel_lstm"],
+    # "models": ["cnn_lstm"],
     #'models': ['attention_lstm'],
     "compare_distributions": False,
     "shuffle": True,
