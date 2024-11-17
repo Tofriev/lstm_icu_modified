@@ -42,6 +42,10 @@ class Preprocessor:
             print("Processing MIMIC data...")
             self.process_mimic()
             print("Processing MIMIC done...")
+        elif self.data_type == "tudd":
+            print("Processing TUDD...")
+            self.process_tudd()
+            print("Processing TUDD done...")
 
         # if "tudd" in self.data:
         #     print("Processing TUDD data...")
@@ -414,43 +418,38 @@ class Preprocessor:
             print(f"Mean {feature} TUDD: {tudd_df[feature].mean()}")
 
     def process_tudd(self):
-        measurements = self.data["tudd"]["measurements"]
-        mortality_info = self.data["tudd"]["mortality_info"]
-
-        self.SEQUENCE_FEATURES = [
-            "hr_value",
-            "mbp_value",
-            "gcs_total_value",
-            "glc_value",
-            "creatinine_value",
-            "potassium_value",
-            "wbc_value",
-            "platelets_value",
-            "inr_value",
-            "anion_gap_value",
-            "lactate_value",
-            "temperature_value",
-            "weight_value",
-        ]
-        self.NUMERICAL_FEATURES = self.SEQUENCE_FEATURES + ["age"]  # , 'height_value']
-        self.CAT_FEATURES = ["gender"]
-        self.ALL_FEATURES = self.NUMERICAL_FEATURES + self.CAT_FEATURES
+        measurements = self.data_process["pre_processing"]["measurements"].copy()
+        mortality_info = self.data_process["pre_processing"]["mortality_info"].copy()
 
         measurements["measurement_offset"] = pd.to_numeric(
             measurements["measurement_offset"], errors="coerce"
         )
 
+        # merge measurements and mortality info
         measurements = pd.merge(
             measurements,
             mortality_info[
-                ["caseid", "stay_duration", "age", "gender", "bodyweight", "exitus"]
-            ],  #'bodyheight',
+                [
+                    "caseid",
+                    "stay_duration",
+                    "age",
+                    "gender",
+                    "bodyweight",
+                    "bodyheight",
+                    "exitus",
+                ]
+            ],
             on="caseid",
             how="left",
         )
+
+        # 'caseid' to 'stay_id'
         measurements.rename(columns={"caseid": "stay_id"}, inplace=True)
         mortality_info.rename(columns={"caseid": "stay_id"}, inplace=True)
+
+        # calculate ICU stay duration in hours
         measurements["stay_duration_hours"] = measurements["stay_duration"] * 24
+
         measurements["measurement_time_from_admission"] = (
             measurements["stay_duration_hours"] + measurements["measurement_offset"]
         )

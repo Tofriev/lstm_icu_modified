@@ -19,15 +19,6 @@ class Pipeline(object):
         )
         self.DataManager.load_data()  # DataManager.data holds all data afterwards
 
-        # if self.show:
-        #     seq, label = self.sequences['train'][0]
-        #     print(seq.shape)
-        #     print(label.shape)
-        #     print(dict(
-        #         sequence=torch.tensor(seq, dtype=torch.float32),
-        #         label=torch.tensor(label).long(),
-        #         ))
-
     def train(self):
         trainer = Trainer(self.parameters)
         if self.parameters[

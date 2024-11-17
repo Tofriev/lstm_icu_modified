@@ -39,21 +39,9 @@ class DatasetManager:
             self.preprocess("mimic")
 
         if "tudd" in self.dataset_type:
-            self.data["tudd_unprocessed"] = {}
+            self.data["tudd"] = {}
             self.load_tudd()
-            self.data["sequences"], self.feature_index_mapping_tudd = self.preprocess(
-                "tudd"
-            )
-
-        if hasattr(self, "feature_index_mapping_mimic") and hasattr(
-            self, "feature_index_mapping_tudd"
-        ):
-            if self.feature_index_mapping_mimic != self.feature_index_mapping_tudd:
-                print(
-                    "Warning: Feature index mappings for MIMIC and TUDD datasets do not match."
-                )
-                print(self.feature_index_mapping_mimic)
-                print(self.feature_index_mapping_tudd)
+            self.preprocess("tudd")
 
     def preprocess(self, data_type: str):
         sequences_dict = {}
@@ -73,21 +61,18 @@ class DatasetManager:
             # ),
             # feature_index_mapping_sequences, scaler,
             self.data["mimic"] = preprocessor_mimic.data_process
-
             scaler = preprocessor_mimic.scaler
 
         if "tudd" in self.data:
             preprocessor_tudd = Preprocessor(
-                {"tudd": self.data["tudd"]},
+                data_type,
+                self.data["tudd"],
                 self.variables,
                 self.parameters,
                 scaler,
             )
-            sequences_tudd, feature_index_mapping_tudd = preprocessor_tudd.process()
-            sequences_dict.update(sequences_tudd)
-            feature_index_mapping.update(feature_index_mapping_tudd)
 
-        return sequences_dict, feature_index_mapping
+            preprocessor_tudd.process()
 
     def load_mimic(self):
         print("Loading MIMIC data...")
@@ -114,9 +99,7 @@ class DatasetManager:
     def load_tudd(self):
         file_path = os.path.join(self.tudd_datapath, "tudd_complete.csv")
         if os.path.exists(file_path):
-            self.data["tudd_unprocessed"]["measurements"] = pd.read_csv(
-                file_path, sep="|"
-            )
+            self.data["tudd"]["measurements"] = pd.read_csv(file_path, sep="|")
         else:
             raise FileNotFoundError(f"{file_path} does not exist.")
 
@@ -133,7 +116,7 @@ class DatasetManager:
             else:
                 raise FileNotFoundError(f"{path} does not exist.")
 
-        self.data["tudd_unprocessed"]["mortality_info"] = pd.concat(
+        self.data["tudd"]["mortality_info"] = pd.concat(
             mortality_info_list, ignore_index=True
         )
 

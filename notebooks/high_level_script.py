@@ -99,7 +99,7 @@ parameters = {
             "weight_decay": 1e-5,
             "class_weights": [1.0, 3.0],
             "batch_size": 32,
-            "n_epochs": 3,
+            "n_epochs": 4,
             "gradient_clip_val": 1,
         },
         "multi_channel_lstm": {

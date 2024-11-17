@@ -22,14 +22,14 @@ data_intervals AS (
         m.outtime,
         m.mortality,
         m.deathtime,
-        -- when deceased start 3 days before death, othewrise start at admission
+        -- when deceased start 3 days before death, othewise start at admission
         CASE
-            WHEN m.mortality = 1 THEN datetime(m.deathtime, '-3 days')
+            WHEN m.mortality = 1 THEN MAX(datetime(m.deathtime, '-3 days'), m.intime)
             ELSE m.intime
         END AS data_start,
         --  end 24 hours after the start time
         CASE
-            WHEN m.mortality = 1 THEN datetime(m.deathtime, '-3 days', '+24 hours')
+             WHEN m.mortality = 1 THEN datetime(MAX(datetime(m.deathtime, '-3 days'), m.intime), '+24 hours')
             ELSE datetime(m.intime, '+24 hours')
         END AS data_end
     FROM mort m
@@ -46,6 +46,7 @@ valid_intervals AS (
         di.data_end,
         -- is interval valid ?
         CASE
+            WHEN di.mortality = 1 AND julianday(di.deathtime) - julianday(di.data_start) < 1 THEN 0
             WHEN datetime(di.data_start, '+24 hours') <= di.outtime THEN 1
             ELSE 0
         END AS valid_observation
