@@ -16,7 +16,14 @@ class DatasetManager:
     def __init__(self, variables: list, parameters={}):
         # dataset types: mimic_mimic, mimic_tudd, tudd_tudd,
         # tudd_mimic, fractional_mimic_tudd, fractional_tudd_mimic
-        self.mimic_datapath = os.path.join(project_root, "data/raw/mimiciv/")
+        if parameters["method"] == "3_day":
+            self.mimic_datapath = os.path.join(
+                project_root, "data/raw/mimiciv/3_day_mortality"
+            )
+        else:
+            self.mimic_datapath = os.path.join(
+                project_root, "data/raw/mimiciv/first_24h"
+            )
         self.tudd_datapath = os.path.join(project_root, "data/raw/tudd/")
         self.variables = variables
         self.dataset_type = parameters["dataset_type"]

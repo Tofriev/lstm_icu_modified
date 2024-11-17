@@ -16,11 +16,11 @@ variables = {
     "gcs_total": {"type": "numerical", "training": True},  # Glasgow Coma Scale Total
     "glc": {"type": "numerical", "training": True},  # Glucose levels
     # "resprate_mortality": {"type": "numerical", "training": True},  # Respiratory Rate TODO: extract resprate. we dont need mortality here anymore
-    "creatinine": {"type": "numerical", "training": True},  # Creatinine levels
+    # "creatinine": {"type": "numerical", "training": True},  # Creatinine levels
     "potassium": {"type": "numerical", "training": True},  # Potassium levels
     "hr": {"type": "numerical", "training": True},  # Heart Rate
-    "sodium": {"type": "numerical", "training": True},  # Sodium levels
-    "wbc": {"type": "numerical", "training": True},  # White Blood Cells (leukocytes)
+    # "sodium": {"type": "numerical", "training": True},  # Sodium levels
+    # "wbc": {"type": "numerical", "training": True},  # White Blood Cells (leukocytes)
     "platelets": {"type": "numerical", "training": True},  # Platelets (thrombocytes)
     "inr": {
         "type": "numerical",
@@ -44,7 +44,12 @@ variables = {
 
 
 def count_features(variables):
-    exclude_keys = {"mortality", "intime", "first_day_end", "stay_id", "static_data"}
+    exclude_keys = {
+        "mortality",
+        "intime",
+        "first_day_end" "stay_id",
+        "static_data",
+    }
 
     top_level_keys = [key for key in variables if key not in exclude_keys]
     count = len(top_level_keys)
@@ -59,6 +64,7 @@ n_features = count_features(variables)
 # model parameters work also for tudd
 parameters = {
     "target": "mortality",
+    "method": "3_day",
     #'dataset_type': 'tudd_tudd',
     "dataset_type": "mimic_mimic",
     #'dataset_type': 'tudd_mimic',
@@ -74,7 +80,7 @@ parameters = {
     "scaling": "Standard",  # Standard and MinMax implemented, also try Robust
     #'scaling_range': [0, 1],
     #'n_features': n_features,
-    "n_features": n_features,
+    "n_features": 14,
     "models": ["lstm"],
     # "models": ["multi_channel_lstm"],
     # "models": ["cnn_lstm"],

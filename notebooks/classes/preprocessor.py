@@ -347,6 +347,9 @@ class Preprocessor:
         self.data_process["sequences_train"] = sequence_dict["train"]
         self.data_process["sequences_test"] = sequence_dict["test"]
         print(self.data_process["sequences_train"][0])
+        print(self.data_process["sequences_train"][0][0].shape)
+        print(self.data_process["sequences_test"][0])
+        print(self.data_process["sequences_test"][0][0].shape)
 
     #     stay_ids_to_drop = X.groupby('stay_id')[self.NUMERICAL_FEATURES].apply(
     #         lambda group: group.isnull().all(axis=0).any()
