@@ -61,18 +61,24 @@ class DatasetManager:
             # ),
             # feature_index_mapping_sequences, scaler,
             self.data["mimic"] = preprocessor_mimic.data_process
-            scaler = preprocessor_mimic.scaler
+            self.scaler = preprocessor_mimic.scaler
 
         if "tudd" in self.data:
-            preprocessor_tudd = Preprocessor(
-                data_type,
-                self.data["tudd"],
-                self.variables,
-                self.parameters,
-                scaler,
-            )
+            preprocessor_args = {
+                "data_type": data_type,
+                "data": self.data["tudd"],
+                "variables": self.variables,
+                "parameters": self.parameters,
+            }
+
+            # include mimic scaler if it exists
+            if hasattr(self, "scaler"):
+                preprocessor_args["scaler"] = self.scaler
+
+            preprocessor_tudd = Preprocessor(**preprocessor_args)
 
             preprocessor_tudd.process()
+            self.data["tudd"] = preprocessor_tudd.data_process
 
     def load_mimic(self):
         print("Loading MIMIC data...")
@@ -97,11 +103,18 @@ class DatasetManager:
                 )
 
     def load_tudd(self):
-        file_path = os.path.join(self.tudd_datapath, "tudd_complete.csv")
-        if os.path.exists(file_path):
-            self.data["tudd"]["measurements"] = pd.read_csv(file_path, sep="|")
-        else:
-            raise FileNotFoundError(f"{file_path} does not exist.")
+        # test for age
+        file_path_1 = os.path.join(self.tudd_datapath, "measurements_ane.csv")
+        file_path_2 = os.path.join(self.tudd_datapath, "measurements_others2_ane.csv")
+        measurements_list = []
+        for path in [file_path_1, file_path_2]:
+            if os.path.exists(path):
+                measurements_list.append(pd.read_csv(path, sep="|"))
+            else:
+                raise FileNotFoundError(f"{path} does not exist.")
+        self.data["tudd"]["measurements"] = pd.concat(
+            measurements_list, ignore_index=True
+        )
 
         # mortality info
         mortality_info_x_path = os.path.join(self.tudd_datapath, "stays_ane.csv")

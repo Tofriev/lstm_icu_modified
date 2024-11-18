@@ -28,14 +28,14 @@ variables = {
     },  # International Normalized Ratio (Prothrombin Time)
     "anion_gap": {"type": "numerical", "training": True},  # Anion Gap
     "lactate": {"type": "numerical", "training": True},  # Lactate levels
-    "urea": {"type": "numerical", "training": True},  # Urea levels
+    # "urea": {"type": "numerical", "training": True},  # Urea levels
     "temperature": {"type": "numerical", "training": True},  # Body Temperature
     "weight": {"type": "numerical", "training": True},  # Weight over time (time series)
     "static_data": {
         "mortality": {"type": "target", "training": False},  # Mortality outcome
         "age": {"type": "numerical", "training": True},  # Age
         "gender": {"type": "categorical", "training": True},  # Gender
-        #'height': {'type': 'numerical', 'training': True},     # Height
+        "height": {"type": "numerical", "training": True},  # Height
         "intime": {"type": "datetime", "training": False},
         "first_day_end": {"type": "datetime", "training": False},
         "stay_id": {"type": "id", "training": False},
@@ -65,14 +65,14 @@ n_features = count_features(variables)
 parameters = {
     "target": "mortality",
     "method": "3_day",
-    #'dataset_type': 'tudd_tudd',
-    "dataset_type": "mimic_mimic",
+    "dataset_type": "tudd_tudd",
+    # "dataset_type": "mimic_mimic",
     #'dataset_type': 'tudd_mimic',
     # "dataset_type": "mimic_tudd",
     "golden_tudd": False,
     #'dataset_type': 'mimic_tudd_fract',
     #'fractional_steps': 1000, # example for mimic_tudd: adds 1000 samples from tudd train to the training set of mimic for every fraction
-    "small_data": False,  # not implemented for tudd yet
+    "small_data": True,  # not implemented for tudd yet
     "aggregation_frequency": "H",
     "imputation": {
         "method": "ffill_bfill"
@@ -87,7 +87,7 @@ parameters = {
     #'models': ['attention_lstm'],
     "compare_distributions": False,
     "shuffle": True,
-    "sparsity_check": True,  # prints
+    "sparsity_check": False,  # prints n of stay ids without any observations for a given feature
     "model_parameters": {
         "lstm": {  # model config will be input to model __init__
             "n_hidden": 100,
