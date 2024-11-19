@@ -103,7 +103,6 @@ class DatasetManager:
                 )
 
     def load_tudd(self):
-        # test for age
         file_path_1 = os.path.join(self.tudd_datapath, "measurements_ane.csv")
         file_path_2 = os.path.join(self.tudd_datapath, "measurements_others2_ane.csv")
         measurements_list = []

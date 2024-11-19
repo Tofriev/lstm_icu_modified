@@ -430,44 +430,26 @@ class Preprocessor:
         survived = mortality_info["exitus"] != 1
         deceased = mortality_info["exitus"] == 1
         num_exitus_cases = mortality_info[mortality_info["exitus"] == 1].shape[0]
-        print(f"Number of cases with exitus == 1 beginning: {num_exitus_cases}")
+        print(f"Number of cases with exitus beginning: {num_exitus_cases}")
         print(f"len before excluding with < 24h: {len(mortality_info)}")
         # exclude all with less than 24h stay
         mortality_info = mortality_info[mortality_info["stay_duration_hours"] >= 24]
-        print(f"len After excluding with < 24h: {len(mortality_info)}")
-        num_exitus_cases = mortality_info[mortality_info["exitus"] == 1].shape[0]
+        # exclude deceased with > 48h stay
+        mortality_info = mortality_info[
+            ~(
+                (mortality_info["exitus"] == 1)
+                & (mortality_info["stay_duration_hours"] > 48)
+            )
+        ]
         print(
-            f"Number of cases with exitus == 1 after dropping < 24h: {num_exitus_cases}"
+            f"len After excluding with < 24h and deceaced > 48h: {len(mortality_info)}"
         )
-        # for survivors take first 24h
-        mortality_info.loc[survived, "window_start"] = 0
-        mortality_info.loc[survived, "window_end"] = 24
-        # for deceased take 72 to 48h before death
-        mortality_info.loc[deceased, "window_start"] = (
-            mortality_info["stay_duration_hours"] - 72
-        )
-        mortality_info.loc[deceased, "window_end"] = (
-            mortality_info["stay_duration_hours"] - 48
-        )
-        print("inserted windows:")
-        mortality_info.head(1000).to_csv("inserted_windows.csv", index=False)
-        # if start is negative for deceased the stay was less then 3 days. Take the first 24h in that case
-        negative_window = deceased & (mortality_info["window_start"] < 0)
-        mortality_info.loc[negative_window, "window_start"] = 0
-        mortality_info.loc[negative_window, "window_end"] = 24
-        print("cleaned negative windows:")
-        mortality_info.to_csv("cleaned_negative_windows.csv", index=False)
-        measurements["measurement_offset"] = pd.to_numeric(
-            measurements["measurement_offset"], errors="coerce"
-        )
+        num_exitus_cases = mortality_info[mortality_info["exitus"] == 1].shape[0]
+        print(f"Number of cases with exitus after dropping: {num_exitus_cases}")
 
         # drop all caseids without measurement entries
-        num_exitus_cases = mortality_info[mortality_info["exitus"] == 1].shape[0]
-        print(f"Number of cases with exitus == 1 before dorpping: {num_exitus_cases}")
         valid_caseids = measurements["caseid"].unique()
         mortality_info = mortality_info[mortality_info["caseid"].isin(valid_caseids)]
-        num_exitus_cases = mortality_info[mortality_info["exitus"] == 1].shape[0]
-        print(f"Number of cases with exitus == 1 after dorpping: {num_exitus_cases}")
 
         # merge measurements and mortality info
         measurements = pd.merge(
@@ -475,8 +457,6 @@ class Preprocessor:
             mortality_info[
                 [
                     "caseid",
-                    "window_start",
-                    "window_end",
                     "stay_duration_hours",
                     "exitus",
                 ]
@@ -489,7 +469,7 @@ class Preprocessor:
         measurements.rename(columns={"caseid": "stay_id"}, inplace=True)
         mortality_info.rename(columns={"caseid": "stay_id"}, inplace=True)
 
-        ##### Only for tud_complete #####
+        ##### Only for tudd_complete #####
         # # this tells us how many hours after admission the the measurement was taken
         # # measurement_offset is a negative value, thats why this works.
         # measurements["measurement_time_from_admission"] = (
@@ -513,19 +493,7 @@ class Preprocessor:
             measurements["measurement_time_from_admission"] <= 0,
             "measurement_time_from_admission",
         ] = 0
-        measurements.head(20000).to_csv("before_applying_windows_new.csv")
-        # filter based on the windows defined above
-        measurements = measurements[
-            (
-                measurements["measurement_time_from_admission"]
-                >= measurements["window_start"]
-            )
-            & (
-                measurements["measurement_time_from_admission"]
-                <= measurements["window_end"]
-            )
-        ]
-        measurements.head(20000).to_csv("after_applying_windows_new.csv")
+
         # aggregate, floor to int for merging
         measurements["value"] = pd.to_numeric(measurements["value"], errors="coerce")
         measurements["measurement_time_from_admission"] = measurements[
@@ -554,8 +522,8 @@ class Preprocessor:
             df_list = []
             for _, row in mortality_info.iterrows():
                 stay_id = row["stay_id"]
-                window_start = int(row["window_start"])
-                window_end = int(row["window_end"])
+                window_start = 0
+                window_end = 23
                 # use linspace here as arrange excludes the last value
                 time_range = np.arange(window_start, window_end)
                 time_df = pd.DataFrame(
@@ -707,7 +675,6 @@ class Preprocessor:
         #         merged_df[self.MIMIC_NUMERICAL_FEATURES]
         #     )
 
-        # Save only the values for the columns in ALL_FEATURES and stay_id and measurement_time_from_admission and exitus
         columns_to_save = (
             ["stay_id", "measurement_time_from_admission"]
             + self.ALL_FEATURES

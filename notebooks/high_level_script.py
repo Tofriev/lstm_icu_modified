@@ -148,7 +148,6 @@ parameters = {
     },
 }
 
-
 pipe = Pipeline(variables=variables, parameters=parameters, show=True)
 pipe.prepare_data()
 # pipe.visualize_sequences()
