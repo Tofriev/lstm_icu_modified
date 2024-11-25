@@ -44,15 +44,19 @@ class Pipeline(object):
 
         elif self.parameters["dataset_type"] == "tudd_tudd":
             self.result_dict = trainer.train(
-                self.sequences["tudd"]["train"], self.sequences["tudd"]["test"]
+                self.DataManager.data["tudd"]["sequences_train"],
+                self.DataManager.data["tudd"]["sequences_test"],
             )
+
         elif self.parameters["dataset_type"] == "mimic_tudd":
             self.result_dict = trainer.train(
-                self.sequences["mimic"]["train"], self.sequences["tudd"]["test"]
+                self.DataManager.data["mimic"]["sequences_train"],
+                self.DataManager.data["tudd"]["sequences_test"],
             )
         elif self.parameters["dataset_type"] == "tudd_mimic":
             self.result_dict = trainer.train(
-                self.sequences["tudd"]["train"], self.sequences["mimic"]["test"]
+                self.DataManager.data["tudd"]["sequences_train"],
+                self.DataManager.data["mimic"]["sequences_test"],
             )
 
     def memorize(self, file_path="parameters_results.csv"):

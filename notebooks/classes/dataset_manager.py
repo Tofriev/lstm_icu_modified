@@ -16,7 +16,7 @@ class DatasetManager:
     def __init__(self, variables: list, parameters={}):
         # dataset types: mimic_mimic, mimic_tudd, tudd_tudd,
         # tudd_mimic, fractional_mimic_tudd, fractional_tudd_mimic
-        self.mimic_datapath = os.path.join(project_root, "data/raw/mimiciv/")
+        self.mimic_datapath = os.path.join(project_root, "data/raw/mimiciv/first_24h/")
         self.tudd_datapath = os.path.join(project_root, "data/raw/tudd/")
         self.variables = variables
         self.dataset_type = parameters["dataset_type"]
@@ -32,21 +32,9 @@ class DatasetManager:
             self.preprocess("mimic")
 
         if "tudd" in self.dataset_type:
-            self.data["tudd_unprocessed"] = {}
+            self.data["tudd"] = {}
             self.load_tudd()
-            self.data["sequences"], self.feature_index_mapping_tudd = self.preprocess(
-                "tudd"
-            )
-
-        if hasattr(self, "feature_index_mapping_mimic") and hasattr(
-            self, "feature_index_mapping_tudd"
-        ):
-            if self.feature_index_mapping_mimic != self.feature_index_mapping_tudd:
-                print(
-                    "Warning: Feature index mappings for MIMIC and TUDD datasets do not match."
-                )
-                print(self.feature_index_mapping_mimic)
-                print(self.feature_index_mapping_tudd)
+            self.preprocess("tudd")
 
     def preprocess(self, data_type: str):
         sequences_dict = {}
@@ -70,17 +58,21 @@ class DatasetManager:
             scaler = preprocessor_mimic.scaler
 
         if "tudd" in self.data:
-            preprocessor_tudd = Preprocessor(
-                {"tudd": self.data["tudd"]},
-                self.variables,
-                self.parameters,
-                scaler,
-            )
-            sequences_tudd, feature_index_mapping_tudd = preprocessor_tudd.process()
-            sequences_dict.update(sequences_tudd)
-            feature_index_mapping.update(feature_index_mapping_tudd)
+            preprocessor_args = {
+                "data_type": data_type,
+                "data": self.data["tudd"],
+                "variables": self.variables,
+                "parameters": self.parameters,
+            }
 
-        return sequences_dict, feature_index_mapping
+            # include mimic scaler if it exists
+            if hasattr(self, "scaler"):
+                preprocessor_args["scaler"] = self.scaler
+
+            preprocessor_tudd = Preprocessor(**preprocessor_args)
+
+            preprocessor_tudd.process()
+            self.data["tudd"] = preprocessor_tudd.data_process
 
     def load_mimic(self):
         print("Loading MIMIC data...")
@@ -105,11 +97,9 @@ class DatasetManager:
                 )
 
     def load_tudd(self):
-        file_path = os.path.join(self.tudd_datapath, "tudd_complete.csv")
+        file_path = os.path.join(self.tudd_datapath, "tudd_incomplete.csv")
         if os.path.exists(file_path):
-            self.data["tudd_unprocessed"]["measurements"] = pd.read_csv(
-                file_path, sep="|"
-            )
+            self.data["tudd"]["measurements"] = pd.read_csv(file_path, sep="|")
         else:
             raise FileNotFoundError(f"{file_path} does not exist.")
 
@@ -126,7 +116,7 @@ class DatasetManager:
             else:
                 raise FileNotFoundError(f"{path} does not exist.")
 
-        self.data["tudd_unprocessed"]["mortality_info"] = pd.concat(
+        self.data["tudd"]["mortality_info"] = pd.concat(
             mortality_info_list, ignore_index=True
         )
 

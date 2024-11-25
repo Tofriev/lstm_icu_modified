@@ -42,6 +42,10 @@ class Preprocessor:
             print("Processing MIMIC data...")
             self.process_mimic()
             print("Processing MIMIC done...")
+        elif self.data_type == "tudd":
+            print("Processing TUDD data...")
+            self.process_tudd()
+            print("Processing TUDD done...")
 
         # if "tudd" in self.data:
         #     print("Processing TUDD data...")
@@ -228,7 +232,10 @@ class Preprocessor:
 
     def impute_with_ffill_bfill(self, df):
         print("imputing with ffill and bfill...")
-        df.sort_values(["stay_id", "charttime"], inplace=True)
+        if self.data_type == "mimic":
+            df.sort_values(["stay_id", "charttime"], inplace=True)
+        elif self.data_type == "tudd":
+            df.sort_values(["stay_id", "measurement_time_from_admission"], inplace=True)
         for num_feature in self.SEQUENCE_FEATURES:
             df[num_feature] = df.groupby("stay_id")[num_feature].ffill()
             df[num_feature] = df.groupby("stay_id")[num_feature].bfill()
@@ -411,51 +418,41 @@ class Preprocessor:
             print(f"Mean {feature} TUDD: {tudd_df[feature].mean()}")
 
     def process_tudd(self):
-        measurements = self.data["tudd"]["measurements"]
-        mortality_info = self.data["tudd"]["mortality_info"]
+        measurements = self.data_process["pre_processing"]["measurements"].copy()
+        mortality_info = self.data_process["pre_processing"]["mortality_info"].copy()
 
-        self.SEQUENCE_FEATURES = [
-            "hr_value",
-            "mbp_value",
-            "gcs_total_value",
-            "glc_value",
-            "creatinine_value",
-            "potassium_value",
-            "wbc_value",
-            "platelets_value",
-            "inr_value",
-            "anion_gap_value",
-            "lactate_value",
-            "temperature_value",
-            "weight_value",
-        ]
-        self.NUMERICAL_FEATURES = self.SEQUENCE_FEATURES + ["age"]  # , 'height_value']
-        self.CAT_FEATURES = ["gender"]
-        self.ALL_FEATURES = self.NUMERICAL_FEATURES + self.CAT_FEATURES
-
-        measurements["measurement_offset"] = pd.to_numeric(
-            measurements["measurement_offset"], errors="coerce"
-        )
+        # calculate ICU stay duration and measurement offset in hours
+        mortality_info["stay_duration_hours"] = mortality_info["stay_duration"] * 24
+        # in tudd_incomplete.csv the measurement_offset is already in hours
+        # measurements["measurement_offset_hours"] = (
+        #     measurements["measurement_offset"] * 24
+        # )
 
         measurements = pd.merge(
             measurements,
-            mortality_info[
-                ["caseid", "stay_duration", "age", "gender", "bodyweight", "exitus"]
-            ],  #'bodyheight',
+            mortality_info[["caseid", "stay_duration_hours"]],
             on="caseid",
             how="left",
         )
-        measurements.rename(columns={"caseid": "stay_id"}, inplace=True)
-        mortality_info.rename(columns={"caseid": "stay_id"}, inplace=True)
-        measurements["stay_duration_hours"] = measurements["stay_duration"] * 24
+
+        # calculate measurement time from admission
+        # assuming measurement offset -0 is at admission
         measurements["measurement_time_from_admission"] = (
             measurements["stay_duration_hours"] + measurements["measurement_offset"]
         )
+
+        # measurements["measurement_offset"] = pd.to_numeric(
+        #     measurements["measurement_offset"], errors="coerce"
+        # )
+
+        measurements.rename(columns={"caseid": "stay_id"}, inplace=True)
+        mortality_info.rename(columns={"caseid": "stay_id"}, inplace=True)
 
         # clean negative vals
         measurements = measurements[
             measurements["measurement_time_from_admission"] > -1
         ]
+        # a little fuzziness is accaptable a the time borders
         measurements.loc[
             measurements["measurement_time_from_admission"] <= -1,
             "measurement_time_from_admission",
@@ -492,7 +489,7 @@ class Preprocessor:
             df_list = []
             for _, row in mortality_info.iterrows():
                 stay_id = row["stay_id"]
-                time_range = np.arange(0, 25)  # hour 0 to 24 inclusive
+                time_range = np.arange(0, 24)  # 24 hour grid
                 time_df = pd.DataFrame(
                     {"stay_id": stay_id, "measurement_time_from_admission": time_range}
                 )
@@ -500,8 +497,9 @@ class Preprocessor:
             return pd.concat(df_list, ignore_index=True)
 
         time_grid = create_time_grid(mortality_info)
+        time_grid.to_csv("time_grid.csv", index=False)
 
-        # merg on time grid
+        # merge on time grid
         merged_df = pd.merge(
             time_grid,
             measurements_pivot,
@@ -511,8 +509,15 @@ class Preprocessor:
         merged_df = pd.merge(
             merged_df,
             mortality_info[
-                ["stay_id", "age", "gender", "bodyweight", "exitus"]
-            ],  # 'bodyheight',
+                [
+                    "stay_id",
+                    "age_value",
+                    "gender_value",
+                    "bodyweight",
+                    "bodyheight",
+                    "exitus",
+                ]
+            ],
             on="stay_id",
             how="left",
         )
@@ -531,7 +536,8 @@ class Preprocessor:
             "T": "temperature_value",
             "GCS": "gcs_total_value",
             "MAP": "mbp_value",
-            "bodyweight": "weight_value",  # , 'bodyheight': 'height_value'
+            "bodyweight": "weight_value",
+            "bodyheight": "height_value",
         }
         merged_df.rename(columns=treatmentnames_mapping, inplace=True)
         print(
@@ -540,7 +546,8 @@ class Preprocessor:
         # bounds
         bounds = {
             "age": (18, 90),
-            "weight_value": (20, 500),  #'height_value': (20, 260),
+            "weight_value": (20, 500),
+            "height_value": (20, 260),
             "temperature_value": (20, 45),
             "hr_value": (10, 300),
             "glc_value": (5, 2000),
@@ -592,137 +599,60 @@ class Preprocessor:
         print(
             f'number of unique stay_ids before filtering: {merged_df["stay_id"].nunique()}'
         )
-        # filter
-        merged_df = merged_df[merged_df["age"] >= 18]
-        merged_df["age"] = merged_df["age"].apply(lambda x: min(x, 90))
+        # filter age
+        merged_df = merged_df[merged_df["age_value"] >= 18]
+        merged_df["age_value"] = merged_df["age_value"].apply(lambda x: min(x, 90))
 
         for feature, (lower, upper) in bounds.items():
             if feature in merged_df.columns:
                 merged_df.loc[merged_df[feature] < lower, feature] = np.nan
                 merged_df.loc[merged_df[feature] > upper, feature] = np.nan
-        merged_df["gender"] = merged_df["gender"].map({"m": 0, "w": 1})
-        if self.compare_distributions:
-            self.plot_dict["tudd"] = merged_df
-
-        if self.parameters["golden_tudd"]:
-            target_proportion_before = merged_df["exitus"].mean()
-            print(f"Proportion of target before dropping: {target_proportion_before}")
-
-            missing_counts = merged_df.groupby("stay_id")[self.ALL_FEATURES].apply(
-                lambda x: x.isnull().sum().sum()
-            )  # total missing across all vars
-            missing_counts = missing_counts.sort_values()  # sort from least to most
-            top_1000_stay_ids = missing_counts.index[:1000]
-            merged_df = merged_df[merged_df["stay_id"].isin(top_1000_stay_ids)]
-
-            target_proportion_after = merged_df["exitus"].mean()
-            print(f"Proportion of target after dropping: {target_proportion_after}")
-
-            if merged_df["stay_id"].nunique() != 1000:
-                raise ValueError(
-                    f"Expected 1000 unique stay_ids, but got {merged_df['stay_id'].nunique()}."
-                )
+        merged_df["gender_value"] = merged_df["gender_value"].map({"m": 0, "w": 1})
 
         print(
             f'number of unique stay_ids before iumputing: {merged_df["stay_id"].nunique()}'
         )
+
         # imputation
-        # merged_df.sort_values(['stay_id', 'measurement_time_from_admission'], inplace=True)
-        merged_df = self.impute(merged_df)
-        # if self.imputation['method'] == 'ffill_bfill':
-        #     merged_df = merged_df.groupby('caseid').apply(lambda group: group.ffill().bfill()).reset_index(drop=True)
-
-        #     self.find_variables_with_only_nan(merged_df)
-
-        #     stay_ids_to_drop = merged_df.groupby('caseid')[self.NUMERICAL_FEATURES].apply(
-        #     lambda group: group.isnull().all(axis=0).any()
-        # )
-        #     stay_ids_to_drop = stay_ids_to_drop[stay_ids_to_drop].index
-
-        #     print(f"Number of TUDD observations before dropping: {len(merged_df)}")
-        #     #merged_df = merged_df[~merged_df['caseid'].isin(stay_ids_to_drop)]
-        #     print(f"Number of TUDD observations left after dropping: {len(merged_df)}")
-
-        # elif self.imputation['method'] == 'knn':
-        #     merged_df = self.impute_with_knn(merged_df)
-
-        if self.compare_distributions:
-            self.plot_dict["tudd_imputed"] = merged_df.copy()
-        # categorical features
-        merged_df["gender"].fillna(merged_df["gender"].mode()[0], inplace=True)
+        if self.imputation["method"] == "ffill_bfill":
+            merged_df = self.impute_with_ffill_bfill(merged_df)
         merged_df["exitus"].fillna(0, inplace=True)
 
-        if self.parameters["scaling"] == "standard":
-            # scaler = StandardScaler()
-            merged_df[self.MIMIC_NUMERICAL_FEATURES] = self.mimic_scaler.transform(
-                merged_df[self.MIMIC_NUMERICAL_FEATURES]
-            )
-        elif self.parameters["scaling"] == "MinMax":
-            # scaler = MinMaxScaler(feature_range=(self.parameters['scaling_range'][0], self.parameters['scaling_range'][1]))
-            merged_df[self.MIMIC_NUMERICAL_FEATURES] = self.mimic_scaler.transform(
-                merged_df[self.MIMIC_NUMERICAL_FEATURES]
-            )
-
-        # column_order = [
-        #     'caseid', 'measurement_time_from_admission', 'mbp_value', 'gcs_total_value', 'glc_value',
-        #     'creatinine_value', 'potassium_value', 'hr_value', 'wbc_value', 'platelets_value',
-        #     'lactate_value','temperature_value','weight_value', 'inr_value', 'anion_gap_value', 'exitus',
-        #     'age', 'gender', 'height_value'
-        # ]
-        column_order = [
-            "stay_id",
-            "measurement_time_from_admission",
-            "mbp_value",
-            "gcs_total_value",
-            "glc_value",
-            "creatinine_value",
-            "potassium_value",
-            "hr_value",
-            "wbc_value",
-            "platelets_value",
-            "temperature_value",
-            "weight_value",
-            "exitus",
-            "age",
-            "gender",
-        ]
-        sorted_merged_df = merged_df[column_order]
-
-        # # drop 'anion_gap_value'
-        # sorted_merged_df.drop(columns=['anion_gap_value'], inplace=True)
-        # self.SEQUENCE_FEATURES.remove('anion_gap_value')
-        # self.NUMERICAL_FEATURES.remove('anion_gap_value')
-        # self.ALL_FEATURES.remove('anion_gap_value')
-
-        # # drop 'inr_value'
-        # sorted_merged_df.drop(columns=['inr_value'], inplace=True)
-        # self.SEQUENCE_FEATURES.remove('inr_value')
-        # self.NUMERICAL_FEATURES.remove('inr_value')
-        # self.ALL_FEATURES.remove('inr_value')
-
-        # # drop lactate_value
-        # sorted_merged_df.drop(columns=['lactate_value'], inplace=True)
-        # self.SEQUENCE_FEATURES.remove('lactate_value')
-        # self.NUMERICAL_FEATURES.remove('lactate_value')
-        # self.ALL_FEATURES.remove('lactate_value')
-
-        print(f"Number of unique stay_ids: {sorted_merged_df['stay_id'].nunique()}")
+        if self.parameters["scaling"] == "Standard":
+            print("scaling....")
+            if hasattr(self, "scaler") and self.scaler is not None:
+                scaler = self.scaler
+                merged_df[self.NUMERICAL_FEATURES] = scaler.transform(
+                    merged_df[self.NUMERICAL_FEATURES]
+                )
+            else:
+                print("using tudd scaler")
+                scaler = StandardScaler()
+                print(f"scaling:{self.NUMERICAL_FEATURES}")
+                merged_df[self.NUMERICAL_FEATURES] = scaler.fit_transform(
+                    merged_df[self.NUMERICAL_FEATURES]
+                )
 
         sequences = []
-        for stay_id, group in sorted_merged_df.groupby("stay_id"):
-            if len(group) == 25:
-                features = group[self.ALL_FEATURES_MIMIC].values
-                label = group["exitus"].iloc[0]
-                sequences.append((features, label))
+        for stay_id, group in merged_df.groupby("stay_id"):
+            print(f"length: {len(group)}")
+            features = group[self.ALL_FEATURES].values
+            label = group["exitus"].iloc[0]
+            sequences.append((features, label))
 
-        self.sequence_dict["tudd"] = {}
-        if self.parameters["golden_tudd"]:
-            self.sequence_dict["tudd"]["test"] = sequences
-            self.sequence_dict["tudd"]["train"] = []
-        else:
-            labels = [seq[1] for seq in sequences]
-            self.sequence_dict["tudd"]["train"], self.sequence_dict["tudd"]["test"] = (
-                train_test_split(
-                    sequences, test_size=0.2, stratify=labels, random_state=42
-                )
+        self.feature_index_mapping_sequences = {
+            index: feature for index, feature in enumerate(self.ALL_FEATURES)
+        }
+
+        self.data_process["sequences"] = sequences
+
+        # split train test
+        labels = [seq[1] for seq in sequences]
+        self.data_process["sequences_train"], self.data_process["sequences_test"] = (
+            train_test_split(
+                self.data_process["sequences"],
+                test_size=0.2,
+                stratify=labels,
+                random_state=42,
             )
+        )

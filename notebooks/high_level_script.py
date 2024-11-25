@@ -19,7 +19,7 @@ variables = {
     "creatinine": {"type": "numerical", "training": True},  # Creatinine levels
     "potassium": {"type": "numerical", "training": True},  # Potassium levels
     "hr": {"type": "numerical", "training": True},  # Heart Rate
-    "sodium": {"type": "numerical", "training": True},  # Sodium levels
+    # "sodium": {"type": "numerical", "training": True},  # Sodium levels
     "wbc": {"type": "numerical", "training": True},  # White Blood Cells (leukocytes)
     "platelets": {"type": "numerical", "training": True},  # Platelets (thrombocytes)
     "inr": {
@@ -28,7 +28,7 @@ variables = {
     },  # International Normalized Ratio (Prothrombin Time)
     "anion_gap": {"type": "numerical", "training": True},  # Anion Gap
     "lactate": {"type": "numerical", "training": True},  # Lactate levels
-    "urea": {"type": "numerical", "training": True},  # Urea levels
+    # "urea": {"type": "numerical", "training": True},  # Urea levels
     "temperature": {"type": "numerical", "training": True},  # Body Temperature
     "weight": {"type": "numerical", "training": True},  # Weight over time (time series)
     "static_data": {
@@ -59,14 +59,13 @@ n_features = count_features(variables)
 # model parameters work also for tudd
 parameters = {
     "target": "mortality",
-    #'dataset_type': 'tudd_tudd',
-    "dataset_type": "mimic_mimic",
+    "dataset_type": "tudd_tudd",
+    # "dataset_type": "mimic_mimic",
     #'dataset_type': 'tudd_mimic',
     # "dataset_type": "mimic_tudd",
-    "golden_tudd": False,
     #'dataset_type': 'mimic_tudd_fract',
     #'fractional_steps': 1000, # example for mimic_tudd: adds 1000 samples from tudd train to the training set of mimic for every fraction
-    "small_data": False,  # not implemented for tudd yet
+    "small_data": True,  # not implemented for tudd yet
     "aggregation_frequency": "H",
     "imputation": {
         "method": "ffill_bfill"
@@ -75,8 +74,8 @@ parameters = {
     #'scaling_range': [0, 1],
     #'n_features': n_features,
     "n_features": n_features,
-    "models": ["lstm"],
-    # "models": ["multi_channel_lstm"],
+    # "models": ["lstm"],
+    "models": ["multi_channel_lstm"],
     # "models": ["cnn_lstm"],
     #'models': ['attention_lstm'],
     "compare_distributions": False,
@@ -92,8 +91,8 @@ parameters = {
             "learning_rate": 1e-4,
             "weight_decay": 1e-5,
             "class_weights": [1.0, 3.0],
-            "batch_size": 32,
-            "n_epochs": 3,
+            "batch_size": 128,
+            "n_epochs": 11,
             "gradient_clip_val": 1,
         },
         "multi_channel_lstm": {
@@ -105,14 +104,14 @@ parameters = {
             "learning_rate": 1e-4,
             "weight_decay": 1e-5,
             "class_weights": [1.0, 3.0],
-            "batch_size": 32,
-            "n_epochs": 5,
+            "batch_size": 128,
+            "n_epochs": 11,
             "gradient_clip_val": 1,
         },
         "cnn_lstm": {
             "n_hidden": 100,
             "n_layers": 1,
-            "n_classes": 2,  # also adjust the steps in lstm model for correct auroc calculation if this changes
+            "n_classes": 2,  # also adjust the steps in lst m model for correct auroc calculation if this changes
             "dropout": 0.75,
             "bidirectional": True,
             "learning_rate": 1e-4,
