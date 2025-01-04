@@ -103,22 +103,30 @@ class DatasetManager:
         else:
             raise FileNotFoundError(f"{file_path} does not exist.")
 
-        # mortality info
-        mortality_info_x_path = os.path.join(self.tudd_datapath, "stays_ane.csv")
-        mortality_info_y_path = os.path.join(
-            self.tudd_datapath, "stays_others2_ane.csv"
-        )
+        mortality_info_path = os.path.join(self.tudd_datapath, "stays_ane_new.csv")
+        if os.path.exists(mortality_info_path):
+            self.data["tudd"]["mortality_info"] = pd.read_csv(
+                mortality_info_path, sep="|"
+            )
+        else:
+            raise FileNotFoundError(f"{mortality_info_path} does not exist.")
 
-        mortality_info_list = []
-        for path in [mortality_info_x_path, mortality_info_y_path]:
-            if os.path.exists(path):
-                mortality_info_list.append(pd.read_csv(path, sep="|"))
-            else:
-                raise FileNotFoundError(f"{path} does not exist.")
+        # # mortality info
+        # mortality_info_x_path = os.path.join(self.tudd_datapath, "stays_ane.csv")
+        # mortality_info_y_path = os.path.join(
+        #     self.tudd_datapath, "stays_others2_ane.csv"
+        # )
 
-        self.data["tudd"]["mortality_info"] = pd.concat(
-            mortality_info_list, ignore_index=True
-        )
+        # mortality_info_list = []
+        # for path in [mortality_info_x_path, mortality_info_y_path]:
+        #     if os.path.exists(path):
+        #         mortality_info_list.append(pd.read_csv(path, sep="|"))
+        #     else:
+        #         raise FileNotFoundError(f"{path} does not exist.")
+
+        # self.data["tudd"]["mortality_info"] = pd.concat(
+        #     mortality_info_list, ignore_index=True
+        # )
 
     def reduce_data(self):  # TODO not implemented for tudd yet and also fot mimic_tudd
         if self.dataset_type == "mimic_mimic":

@@ -63,9 +63,9 @@ parameters = {
     # "dataset_type": "mimic_mimic",
     #'dataset_type': 'tudd_mimic',
     # "dataset_type": "mimic_tudd",
-    #'dataset_type': 'mimic_tudd_fract',
+    # "dataset_type": "mimic_tudd_fract",
     #'fractional_steps': 1000, # example for mimic_tudd: adds 1000 samples from tudd train to the training set of mimic for every fraction
-    "small_data": True,  # not implemented for tudd yet
+    "small_data": False,  # not implemented for tudd yet
     "aggregation_frequency": "H",
     "imputation": {
         "method": "ffill_bfill"
@@ -74,8 +74,11 @@ parameters = {
     #'scaling_range': [0, 1],
     #'n_features': n_features,
     "n_features": n_features,
-    # "models": ["lstm"],
-    "models": ["multi_channel_lstm"],
+    "models": [
+        "lstm",
+        "multi_channel_lstm",
+    ],
+    # "models": ["multi_channel_lstm"],
     # "models": ["cnn_lstm"],
     #'models': ['attention_lstm'],
     "compare_distributions": False,
@@ -92,7 +95,7 @@ parameters = {
             "weight_decay": 1e-5,
             "class_weights": [1.0, 3.0],
             "batch_size": 128,
-            "n_epochs": 11,
+            "n_epochs": 5,
             "gradient_clip_val": 1,
         },
         "multi_channel_lstm": {
@@ -105,7 +108,7 @@ parameters = {
             "weight_decay": 1e-5,
             "class_weights": [1.0, 3.0],
             "batch_size": 128,
-            "n_epochs": 11,
+            "n_epochs": 3,
             "gradient_clip_val": 1,
         },
         "cnn_lstm": {
@@ -153,7 +156,7 @@ pipe.train()
 
 # %%
 # only for fractional learning: use cell above otherwise
-model_names = ["attention_lstm"]
+model_names = ["lstm", "multi_channel_lstm"]
 # model_names = ['lstm', 'multi_channel_lstm', 'cnn_lstm', 'attention_lstm']
 
 json_file = "results.json"

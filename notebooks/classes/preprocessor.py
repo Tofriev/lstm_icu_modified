@@ -432,7 +432,7 @@ class Preprocessor:
             measurements,
             mortality_info[["caseid", "stay_duration_hours"]],
             on="caseid",
-            how="left",
+            how="inner",
         )
 
         # calculate measurement time from admission
@@ -519,7 +519,7 @@ class Preprocessor:
                 ]
             ],
             on="stay_id",
-            how="left",
+            how="inner",
         )
 
         # rename
@@ -644,15 +644,16 @@ class Preprocessor:
             index: feature for index, feature in enumerate(self.ALL_FEATURES)
         }
 
-        self.data_process["sequences"] = sequences
+        self.data_process["sequences_test"] = sequences
+        self.data_process["sequences_train"] = []
 
-        # split train test
-        labels = [seq[1] for seq in sequences]
-        self.data_process["sequences_train"], self.data_process["sequences_test"] = (
-            train_test_split(
-                self.data_process["sequences"],
-                test_size=0.2,
-                stratify=labels,
-                random_state=42,
-            )
-        )
+        # # split train test
+        # labels = [seq[1] for seq in sequences]
+        # self.data_process["sequences_train"], self.data_process["sequences_test"] = (
+        #     train_test_split(
+        #         self.data_process["sequences"],
+        #         test_size=0.2,
+        #         stratify=labels,
+        #         random_state=42,
+        #     )
+        # )

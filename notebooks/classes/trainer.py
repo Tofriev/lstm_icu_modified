@@ -3,37 +3,39 @@ import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 from classes.data_module import IcuDataModule
-from models import get_model_class  
+from models import get_model_class
 from utils import set_seed
+from sklearn.metrics import confusion_matrix, classification_report
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 set_seed(42)
+
 
 class Trainer:
     def __init__(self, parameters):
         self.parameters = parameters
-        self.models = parameters['models']
-        self.model_parameters = parameters['model_parameters']
+        self.models = parameters["models"]
+        self.model_parameters = parameters["model_parameters"]
+        self.results = {}
 
-    def train(self, train_sequences, test_sequences, return_result = False):
+    def train(self, train_sequences, test_sequences, return_result=False):
         for model_name in self.models:
             print(f"Training model: {model_name}")
             model_config = self.model_parameters[model_name]
-            batch_size = model_config['batch_size']
-            n_epochs = model_config['n_epochs']
+            batch_size = model_config["batch_size"]
+            n_epochs = model_config["n_epochs"]
 
             data_module = IcuDataModule(
                 train_sequences=train_sequences,
                 test_sequences=test_sequences,
-                batch_size=batch_size
+                batch_size=batch_size,
             )
 
             ModelClass = get_model_class(model_name)
-            model = ModelClass(
-                n_features=self.parameters['n_features'],
-                **model_config
-            )
+            model = ModelClass(n_features=self.parameters["n_features"], **model_config)
 
-            # checkpointing, look at that later 
+            # checkpointing, look at that later
             # checkpoint_callback = ModelCheckpoint(
             #     dirpath=f'checkpoints/{model_name}',
             #     filename='best-checkpoint',
@@ -44,16 +46,14 @@ class Trainer:
             # )
             logger = TensorBoardLogger("lightning_logs", name=model_name)
 
-            data_module = IcuDataModule(train_sequences, test_sequences, batch_size=model_config['batch_size'])
-
             pl_trainer = pl.Trainer(
                 logger=logger,
                 enable_checkpointing=False,
-                #callbacks=[checkpoint_callback],
+                # callbacks=[checkpoint_callback],
                 max_epochs=n_epochs,
-                accelerator='mps' if torch.backends.mps.is_available() else 'cpu',
+                accelerator="mps" if torch.backends.mps.is_available() else "cpu",
                 devices=1,
-                gradient_clip_val=model_config['gradient_clip_val']
+                gradient_clip_val=model_config["gradient_clip_val"],
             )
             print("Using device:", next(model.parameters()).device)
 
@@ -63,20 +63,46 @@ class Trainer:
 
             pl_trainer.fit(model, data_module)
             result = pl_trainer.test(model, data_module)
-            print(result)
 
+            self.results[model_name] = result
+            # # confusion matrix
+            # true_labels = []
+            # predictions = []
+            # print("starting confusion matrix")
+            # for batch in data_module.test_dataloader():
+            #     x = batch["sequence"]
+            #     y = batch["label"]
+            #     y_pred = model(x).argmax(dim=1).cpu().numpy()
+            #     true_labels.extend(y.cpu().numpy())
+            #     predictions.extend(y_pred)
+            # print("finished confusion matrix")
+            # cm = confusion_matrix(true_labels, predictions)
+            # print("Confusion Matrix:")
+            # print(cm)
+            # plt.figure(figsize=(8, 6))
+            # sns.heatmap(
+            #     cm,
+            #     annot=True,
+            #     fmt="d",
+            #     cmap="Blues",
+            #     xticklabels=["Class 0", "Class 1"],
+            #     yticklabels=["Class 0", "Class 1"],
+            # )
+            # plt.title("Confusion Matrix")
+            # plt.xlabel("Predicted")
+            # plt.ylabel("Actual")
+            # plt.show()
 
-            return result
+            # print("Classification Report:")
+            # print(classification_report(true_labels, predictions))
+        print(self.results)
+        return self.results
 
     def train_fractional(self, sequences):
-        fractional_data = sequences['fractional_mimic_tudd']
+        fractional_data = sequences["fractional_mimic_tudd"]
         fractional_results = {}
         for fraction, sequence in fractional_data.items():
             print(f"Training fraction {fraction}")
-            result = self.train(sequence, sequences['tudd']['test'], return_result=True)
+            result = self.train(sequence, sequences["tudd"]["test"], return_result=True)
             fractional_results[fraction] = result[0]
         return fractional_results
-        
-
-
-        
