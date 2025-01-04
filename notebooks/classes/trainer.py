@@ -18,6 +18,7 @@ class Trainer:
         self.models = parameters["models"]
         self.model_parameters = parameters["model_parameters"]
         self.results = {}
+        self.trained_models = {}
 
     def train(self, train_sequences, test_sequences, return_result=False):
         for model_name in self.models:
@@ -64,6 +65,7 @@ class Trainer:
             pl_trainer.fit(model, data_module)
             result = pl_trainer.test(model, data_module)
 
+            self.trained_models[model_name] = model
             self.results[model_name] = result
             # # confusion matrix
             # true_labels = []
@@ -96,7 +98,7 @@ class Trainer:
             # print("Classification Report:")
             # print(classification_report(true_labels, predictions))
         print(self.results)
-        return self.results
+        return self.results, self.trained_models
 
     def train_fractional(self, sequences):
         fractional_data = sequences["fractional_mimic_tudd"]

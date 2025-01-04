@@ -5,6 +5,7 @@ import os
 import csv
 import matplotlib.pyplot as plt
 import seaborn as sns
+from classes.explainer import SHAPExplainer
 
 
 class Pipeline(object):
@@ -18,7 +19,7 @@ class Pipeline(object):
             variables=self.variables, parameters=self.parameters
         )
         self.DataManager.load_data()  # DataManager.data holds all data afterwards
-
+        self.feature_names = self.DataManager.feature_names
         # if self.show:
         #     seq, label = self.sequences['train'][0]
         #     print(seq.shape)
@@ -34,30 +35,41 @@ class Pipeline(object):
             "dataset_type"
         ] == "mimic_tudd_fract" and self.parameters.get("fractional_steps"):
             print("Training fractional")
-            self.result_dict = trainer.train_fractional(self.sequences)
+            self.result_dict, self.trained_models = trainer.train_fractional(
+                self.sequences
+            )
 
         elif self.parameters["dataset_type"] == "mimic_mimic":
-            self.result_dict = trainer.train(
+            self.result_dict, self.trained_models = trainer.train(
                 self.DataManager.data["mimic"]["sequences_train"],
                 self.DataManager.data["mimic"]["sequences_test"],
             )
+            self.test_sequences = self.DataManager.data["mimic"]["sequences_test"]
 
         elif self.parameters["dataset_type"] == "tudd_tudd":
-            self.result_dict = trainer.train(
+            self.result_dict, self.trained_models = trainer.train(
                 self.DataManager.data["tudd"]["sequences_train"],
                 self.DataManager.data["tudd"]["sequences_test"],
             )
-
+            self.test_sequences = self.DataManager.data["tudd"]["sequences_test"]
         elif self.parameters["dataset_type"] == "mimic_tudd":
-            self.result_dict = trainer.train(
+            self.result_dict, self.trained_models = trainer.train(
                 self.DataManager.data["mimic"]["sequences_train"],
                 self.DataManager.data["tudd"]["sequences_test"],
             )
+            self.test_sequences = self.DataManager.data["tudd"]["sequences_test"]
         elif self.parameters["dataset_type"] == "tudd_mimic":
-            self.result_dict = trainer.train(
+            self.result_dict, self.trained_models = trainer.train(
                 self.DataManager.data["tudd"]["sequences_train"],
                 self.DataManager.data["mimic"]["sequences_test"],
             )
+            self.test_sequences = self.DataManager.data["mimic"]["sequences_test"]
+
+    def explain(self, model_name):
+        explainer = SHAPExplainer(
+            model=self.trained_models[model_name],
+        )
+        explainer.explain(self.test_sequences, self.feature_names, num_samples=10000)
 
     def memorize(self, file_path="parameters_results.csv"):
         if self.parameters.get("fractional_steps"):

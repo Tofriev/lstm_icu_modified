@@ -54,6 +54,7 @@ class DatasetManager:
             # ),
             # feature_index_mapping_sequences, scaler,
             self.data["mimic"] = preprocessor_mimic.data_process
+            self.feature_names = preprocessor_mimic.ALL_FEATURES
 
             scaler = preprocessor_mimic.scaler
 

@@ -59,8 +59,8 @@ n_features = count_features(variables)
 # model parameters work also for tudd
 parameters = {
     "target": "mortality",
-    "dataset_type": "tudd_tudd",
-    # "dataset_type": "mimic_mimic",
+    # "dataset_type": "tudd_tudd",
+    "dataset_type": "mimic_mimic",
     #'dataset_type': 'tudd_mimic',
     # "dataset_type": "mimic_tudd",
     # "dataset_type": "mimic_tudd_fract",
@@ -74,10 +74,11 @@ parameters = {
     #'scaling_range': [0, 1],
     #'n_features': n_features,
     "n_features": n_features,
-    "models": [
-        "lstm",
-        "multi_channel_lstm",
-    ],
+    "models": ["lstm"],
+    # "models": [
+    #     "lstm",
+    #     "multi_channel_lstm",
+    # ],
     # "models": ["multi_channel_lstm"],
     # "models": ["cnn_lstm"],
     #'models': ['attention_lstm'],
@@ -149,6 +150,8 @@ pipe = Pipeline(variables=variables, parameters=parameters, show=True)
 pipe.prepare_data()
 # pipe.visualize_sequences()
 pipe.train()
+# number of samples can be adjusted in pipeline
+pipe.explain("lstm")
 # pipe.memorize()
 
 # print(pipe.result_dict)
