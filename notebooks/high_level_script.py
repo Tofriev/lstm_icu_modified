@@ -65,7 +65,7 @@ parameters = {
     # "dataset_type": "mimic_tudd",
     # "dataset_type": "mimic_tudd_fract",
     #'fractional_steps': 1000, # example for mimic_tudd: adds 1000 samples from tudd train to the training set of mimic for every fraction
-    "small_data": False,  # not implemented for tudd yet
+    "small_data": True,  # not implemented for tudd yet
     "aggregation_frequency": "H",
     "imputation": {
         "method": "ffill_bfill"
@@ -74,7 +74,7 @@ parameters = {
     #'scaling_range': [0, 1],
     #'n_features': n_features,
     "n_features": n_features,
-    "models": ["lstm"],
+    # "models": ["lstm"],
     # "models": [
     #     "lstm",
     #     "multi_channel_lstm",
@@ -150,8 +150,7 @@ pipe = Pipeline(variables=variables, parameters=parameters, show=True)
 pipe.prepare_data()
 # pipe.visualize_sequences()
 pipe.train()
-# number of samples can be adjusted in pipeline
-pipe.explain("lstm")
+pipe.explain(model_name="lstm", method="heatmap_SHAP", num_samples=10000)
 # pipe.memorize()
 
 # print(pipe.result_dict)

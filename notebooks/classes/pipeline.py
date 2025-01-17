@@ -20,6 +20,8 @@ class Pipeline(object):
         )
         self.DataManager.load_data()  # DataManager.data holds all data afterwards
         self.feature_names = self.DataManager.feature_names
+        self.scaler = self.DataManager.scaler  # mimic scaler
+        self.numerical_features = self.DataManager.numerical_features
         # if self.show:
         #     seq, label = self.sequences['train'][0]
         #     print(seq.shape)
@@ -65,11 +67,18 @@ class Pipeline(object):
             )
             self.test_sequences = self.DataManager.data["mimic"]["sequences_test"]
 
-    def explain(self, model_name):
+    def explain(self, model_name, method, num_samples=1000):
         explainer = SHAPExplainer(
             model=self.trained_models[model_name],
         )
-        explainer.explain(self.test_sequences, self.feature_names, num_samples=10000)
+        explainer.explain(
+            self.test_sequences,
+            self.feature_names,
+            method,
+            num_samples,
+            self.scaler,
+            self.numerical_features,
+        )
 
     def memorize(self, file_path="parameters_results.csv"):
         if self.parameters.get("fractional_steps"):

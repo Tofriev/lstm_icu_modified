@@ -55,8 +55,9 @@ class DatasetManager:
             # feature_index_mapping_sequences, scaler,
             self.data["mimic"] = preprocessor_mimic.data_process
             self.feature_names = preprocessor_mimic.ALL_FEATURES
+            self.numerical_features = preprocessor_mimic.NUMERICAL_FEATURES
 
-            scaler = preprocessor_mimic.scaler
+            self.scaler = preprocessor_mimic.scaler
 
         if "tudd" in self.data:
             preprocessor_args = {
@@ -74,6 +75,9 @@ class DatasetManager:
 
             preprocessor_tudd.process()
             self.data["tudd"] = preprocessor_tudd.data_process
+            self.feature_names = preprocessor_tudd.ALL_FEATURES
+            self.numerical_features = preprocessor_tudd.NUMERICAL_FEATURES
+            self.scaler = preprocessor_tudd.scaler
 
     def load_mimic(self):
         print("Loading MIMIC data...")
