@@ -215,6 +215,15 @@ class SHAPExplainer:
         plt.tight_layout()
         plt.show()
 
+    def is_probability_output(self, sample_input):
+        self.model.eval()
+        with torch.no_grad():
+            output = self.model(sample_input)
+            print(f"output: {output}")
+            # Assuming binary classification with output shape (batch_size, 1) or (batch_size,)
+            output_np = output.numpy().flatten()
+            return np.all((output_np >= 0.0) & (output_np <= 1.0))
+
     def explain(
         self,
         sequences,
@@ -236,6 +245,14 @@ class SHAPExplainer:
         - num_samples: Number of samples to explain.
         - batch_size: Batch size for SHAP computation.
         """
+        sample_np = np.array([sequences[0][0]])  # shape (1, time_steps, features)
+        sample_torch = torch.tensor(sample_np).float()
+
+        if self.is_probability_output(sample_torch):
+            print("model output probabilities: wrapping to return logits..")
+            self.model = LogitWrapper(self.model)
+        else:
+            print("Model outputslogits")
 
         self.extract_shap_values(sequences, num_samples, batch_size)
         print(feature_names)
@@ -261,3 +278,20 @@ class SHAPExplainer:
             )
         else:
             raise ValueError(f"Unknown method: {method}")
+
+
+class LogitWrapper(torch.nn.Module):
+    """
+    Wraps a model that returns probabilities so that it instead returns logits.
+    Assumes a *binary* classification scenario with a single probability output (p).
+    """
+
+    def __init__(self, model):
+        super(LogitWrapper, self).__init__()
+        self.model = model
+
+    def forward(self, x):
+        p = self.model(x)
+        p = torch.clamp(p, 1e-7, 1 - 1e-7)
+        logits = torch.log(p / (1 - p))
+        return logits
