@@ -165,6 +165,56 @@ class SHAPExplainer:
         plt.ylabel("Features (Sorted by Overall Importance)")
         plt.show()
 
+    def plot_single_feature_time_shap(
+        self, sample_idx, feature_idx, scaler=None, feature_name=None, output_idx=1
+    ):
+
+        if self.shap_values is None:
+            raise ValueError(
+                "SHAP values have not been extracted. Call extract_shap_values first."
+            )
+
+        # time-series values for the sample & feature
+        raw_values = self.test_data_np[sample_idx, :, feature_idx]
+
+        # SHAP for sample/sequence & feature
+        shap_vals = self.shap_values[output_idx][sample_idx, :, feature_idx]
+
+        # inverse scale for x acis
+        if scaler is not None:
+            # Reshape to (time_steps, 1)
+            feature_scale = scaler.scale_[feature_idx]
+            feature_mean = scaler.mean_[feature_idx]
+            feature_values = raw_values * feature_scale + feature_mean
+        else:
+            feature_values = raw_values
+
+        time_steps = np.arange(len(feature_values))
+        fig, ax1 = plt.subplots(figsize=(10, 5))
+
+        color_feature = "tab:blue"
+        ax1.set_xlabel("Time Step")
+        ax1.set_ylabel("Feature Value", color=color_feature)
+        ax1.plot(time_steps, feature_values, color=color_feature, label="Feature Value")
+        ax1.tick_params(axis="y", labelcolor=color_feature)
+
+        ax2 = ax1.twinx()
+        color_shap = "tab:red"
+        ax2.set_ylabel("SHAP Value", color=color_shap)
+        ax2.plot(time_steps, shap_vals, color=color_shap, label="SHAP Value")
+        ax2.tick_params(axis="y", labelcolor=color_shap)
+
+        if feature_name is None:
+            feature_name = f"Feature {feature_idx}"
+        plt.title(f"Feature: {feature_name} (Sample {sample_idx})")
+
+        lines1, labels1 = ax1.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax2.legend(lines1 + lines2, labels1 + labels2, loc="upper right")
+
+        plt.tight_layout()
+        plt.show()
+
     def explain(
         self,
         sequences,
@@ -188,7 +238,7 @@ class SHAPExplainer:
         """
 
         self.extract_shap_values(sequences, num_samples, batch_size)
-
+        print(feature_names)
         if (
             method == "scatter_SHAP"
             and scaler is not None
@@ -205,5 +255,9 @@ class SHAPExplainer:
             self.explain_with_ordinary_SHAP(feature_names)
         elif method == "heatmap_SHAP":
             self.plot_shap_heatmap(feature_names)
+        elif method == "plot_single_feature_time_shap":
+            self.plot_single_feature_time_shap(
+                sample_idx=1, feature_idx=0, scaler=scaler, feature_name="mps_value"
+            )
         else:
             raise ValueError(f"Unknown method: {method}")
