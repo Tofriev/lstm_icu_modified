@@ -74,7 +74,7 @@ parameters = {
     #'scaling_range': [0, 1],
     #'n_features': n_features,
     "n_features": n_features,
-    # "models": ["lstm"],
+    "models": ["lstm"],
     # "models": [
     #     "lstm",
     #     "multi_channel_lstm",
@@ -150,7 +150,7 @@ pipe = Pipeline(variables=variables, parameters=parameters, show=True)
 pipe.prepare_data()
 # pipe.visualize_sequences()
 pipe.train()
-pipe.explain(model_name="lstm", method="heatmap_SHAP", num_samples=10000)
+pipe.explain(model_name="lstm", method="heatmap_SHAP", num_samples=100)
 # pipe.memorize()
 
 # print(pipe.result_dict)

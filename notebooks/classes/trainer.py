@@ -74,6 +74,7 @@ class Trainer:
             for batch in data_module.test_dataloader():
                 x = batch["sequence"]
                 y = batch["label"]
+                print("y_shape:", y.shape)
                 y_pred = model(x).argmax(dim=1).cpu().numpy()
                 true_labels.extend(y.cpu().numpy())
                 predictions.extend(y_pred)

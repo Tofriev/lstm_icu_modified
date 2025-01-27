@@ -14,7 +14,9 @@ class SHAPExplainer:
         self.test_data_np = None
         self.scale_factors = None
 
-    def extract_shap_values(self, sequences, num_samples, batch_size=10):
+    def extract_shap_values(
+        self, sequences, num_samples, batch_size=10, background_pct=0.1, random_seed=42
+    ):
         """
         Extract SHAP values for the model and store them in the class instance.
 
@@ -25,35 +27,66 @@ class SHAPExplainer:
         """
         print("Extracting SHAP values...")
 
-        self.test_data_np = np.array([seq[0] for seq in sequences[:num_samples]])
-        print(f"Test data shape: {self.test_data_np.shape}")
+        all_data_np = np.array([seq[0] for seq in sequences])
+        total_samples, time_steps, num_features = all_data_np.shape
 
-        background_data = torch.tensor(
-            [seq[0] for seq in sequences[:batch_size]]
-        ).float()
+        print(f"Dataset Shape: {all_data_np.shape}")
+        print(f"First 10 rows of dataset:\n{all_data_np[:10]}")
+
+        # decide on backgound data
+        np.random.seed(random_seed)
+        indices = np.arange(total_samples)
+        np.random.shuffle(indices)
+
+        num_background = int(background_pct * total_samples)
+        background_idx = indices[:num_background]
+        test_idx = indices[num_background:]
+
+        print(f"N background samples: {num_background}")
+        print(f"N remaining samples: {len(test_idx)}")
+
+        background_data_np = all_data_np[background_idx]
+        # torch.Tensor for shap.DeepExplainer
+        background_data = torch.tensor(background_data_np).float()
+
         print(f"Background data shape: {background_data.shape}")
+        print("background data row:\n", background_data_np[0])
+
+        # exclude backgrond from test
+        test_data_np = all_data_np[test_idx]
+        if num_samples > len(test_data_np):
+            num_samples = len(test_data_np)
+
+        # take the samples from test data
+        test_data_np = test_data_np[:num_samples]
+        self.test_data_np = test_data_np
+
+        print(f"test data shape: {test_data_np.shape}")
+        print("test data row:\n", test_data_np[0])
 
         explainer = shap.DeepExplainer(self.model, background_data)
 
-        test_data_tensor = torch.tensor(
-            [seq[0] for seq in sequences[:num_samples]]
-        ).float()
-        print(f"Test data tensor shape: {test_data_tensor.shape}")
+        # test data to tensor
+        test_data_tensor = torch.tensor(test_data_np).float()
 
+        # run shap batches
         shap_values_batches = []
-
         for i in tqdm(range(0, num_samples, batch_size), desc="Processing Batches"):
             batch = test_data_tensor[i : i + batch_size]
             shap_values_batch = explainer.shap_values(batch)
             shap_values_batches.append(shap_values_batch)
-            print(f"Processed batch {i//batch_size + 1}")
+            print(f"Processed batch {i // batch_size + 1}")
 
         # concat SHAP values across batches
         self.shap_values = [
             np.concatenate([batch[i] for batch in shap_values_batches], axis=0)
             for i in range(len(shap_values_batches[0]))
         ]
-        print(f"SHAP values shape: {[sv.shape for sv in self.shap_values]}")
+
+        # inspect
+        for output_index, sv in enumerate(self.shap_values):
+            print(f"SHAP values output {output_index} shape: {sv.shape}")
+            print(f"Example rows of SHAP values output {output_index}:\n{sv[:10]}")
 
     def explain_with_ordinary_SHAP(self, feature_names):
         """
@@ -63,7 +96,7 @@ class SHAPExplainer:
 
         num_features = self.test_data_np.shape[2]
 
-        aggregated_shap_values = self.shap_values[0].mean(
+        aggregated_shap_values = self.shap_values[1].mean(
             axis=1
         )  # Shape: (num_samples, num_features)
         aggregated_test_data = self.test_data_np.mean(
@@ -93,7 +126,7 @@ class SHAPExplainer:
             )
 
         # shape: (num_samples, time_steps, num_features)
-        shap_values = np.abs(self.shap_values[0])  # absolute SHAP values
+        shap_values = np.abs(self.shap_values[1])  # absolute SHAP values
 
         #  ranks across features for each sample and timestep
         ranks = (
@@ -165,7 +198,7 @@ class SHAPExplainer:
             print(f"Numerical feature indices for SHAP adjustment: {numerical_indices}")
             print(f"Scale factors for SHAP adjustment: {self.scale_factors}")
             # Correctly adjust SHAP values by dividing by scale_factors
-            self.shap_values[0][:, :, numerical_indices] /= self.scale_factors
+            self.shap_values[1][:, :, numerical_indices] /= self.scale_factors
             print("Adjusted SHAP values by dividing with scale factors.")
 
         if method == "ordinary_SHAP":

@@ -6,8 +6,21 @@ from utils import set_seed
 
 set_seed(42)
 
+
 class LSTMModel(pl.LightningModule):
-    def __init__(self, n_features, n_classes, n_hidden, n_layers, dropout, bidirectional, learning_rate, weight_decay, class_weights, **kwargs):
+    def __init__(
+        self,
+        n_features,
+        n_classes,
+        n_hidden,
+        n_layers,
+        dropout,
+        bidirectional,
+        learning_rate,
+        weight_decay,
+        class_weights,
+        **kwargs
+    ):
         super().__init__()
         self.save_hyperparameters()
         self.lstm = nn.LSTM(
@@ -16,7 +29,7 @@ class LSTMModel(pl.LightningModule):
             num_layers=n_layers,
             batch_first=True,
             dropout=dropout,
-            bidirectional=bidirectional
+            bidirectional=bidirectional,
         )
         hidden_size = n_hidden * (2 if bidirectional else 1)
         self.classifier = nn.Linear(hidden_size, n_classes)
@@ -37,42 +50,66 @@ class LSTMModel(pl.LightningModule):
         return self.classifier(out)
 
     def training_step(self, batch, batch_idx):
-        sequences = batch['sequence']
-        labels = batch['label']
-        print(f"Batch {batch_idx}: Sequences shape={sequences.shape}, Labels shape={labels.shape}")
+        sequences = batch["sequence"]
+        labels = batch["label"]
 
         outputs = self(sequences)
         loss = self.criterion(outputs, labels)
         probabilities = torch.softmax(outputs, dim=1)[:, 1]
-        step_auroc = auroc(probabilities, labels, task='binary')
-        self.log('train_loss', loss, prog_bar=True, logger=True,on_step=False, on_epoch=True)
-        self.log('train_auroc', step_auroc, prog_bar=True, logger=True,on_step=False, on_epoch=True)
+        step_auroc = auroc(probabilities, labels, task="binary")
+        self.log(
+            "train_loss", loss, prog_bar=True, logger=True, on_step=False, on_epoch=True
+        )
+        self.log(
+            "train_auroc",
+            step_auroc,
+            prog_bar=True,
+            logger=True,
+            on_step=False,
+            on_epoch=True,
+        )
         return loss
 
     def validation_step(self, batch, batch_idx):
-        sequences = batch['sequence']
-        labels = batch['label']
+        sequences = batch["sequence"]
+        labels = batch["label"]
         outputs = self(sequences)
         loss = self.criterion(outputs, labels)
         probabilities = torch.softmax(outputs, dim=1)[:, 1]
-        step_auroc = auroc(probabilities, labels, task='binary')
-        self.log('val_loss', loss, prog_bar=True, logger=True,on_step=False, on_epoch=True)
-        self.log('val_auroc', step_auroc, prog_bar=True, logger=True,on_step=False, on_epoch=True)
+        step_auroc = auroc(probabilities, labels, task="binary")
+        self.log(
+            "val_loss", loss, prog_bar=True, logger=True, on_step=False, on_epoch=True
+        )
+        self.log(
+            "val_auroc",
+            step_auroc,
+            prog_bar=True,
+            logger=True,
+            on_step=False,
+            on_epoch=True,
+        )
 
     def test_step(self, batch, batch_idx):
-        sequences = batch['sequence']
-        labels = batch['label']
+        sequences = batch["sequence"]
+        labels = batch["label"]
         outputs = self(sequences)
         loss = self.criterion(outputs, labels)
         probabilities = torch.softmax(outputs, dim=1)[:, 1]
-        step_auroc = auroc(probabilities, labels, task='binary')
-        self.log('test_loss', loss, prog_bar=True, logger=True,on_step=False, on_epoch=True)
-        self.log('test_auroc', step_auroc, prog_bar=True, logger=True,on_step=False, on_epoch=True)
+        step_auroc = auroc(probabilities, labels, task="binary")
+        self.log(
+            "test_loss", loss, prog_bar=True, logger=True, on_step=False, on_epoch=True
+        )
+        self.log(
+            "test_auroc",
+            step_auroc,
+            prog_bar=True,
+            logger=True,
+            on_step=False,
+            on_epoch=True,
+        )
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(
-            self.parameters(),
-            lr=self.learning_rate,
-            weight_decay=self.weight_decay
+            self.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay
         )
         return optimizer
