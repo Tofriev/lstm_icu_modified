@@ -68,8 +68,10 @@ parameters = {
     # "dataset_type": "combined_combined",
     # "dataset_type": "combined_mimic",
     # "dataset_type": "combined_tudd",
-    "dataset_type": "tudd_fract",
-    "fractional_steps": 1000,  # example for mimic_tudd: adds 1000 samples from tudd train to the training set of mimic for every fraction. maybe try with 200.
+    "dataset_type": ["tudd_fract", "mimic_tudd_fract"],
+    #'dataset_type': 'mimic_tudd_fract',
+    # "dataset_type": "mimic_tudd_fract",
+    "fractional_steps": 20000,  # example for mimic_tudd: adds 1000 samples from tudd train to the training set of mimic for every fraction. maybe try with 200.
     "small_data": False,  # not implemented for tudd yet
     "aggregation_frequency": "H",
     "imputation": {
@@ -80,16 +82,17 @@ parameters = {
     #'n_features': n_features,
     "n_features": n_features,
     # "models": ["lstm"],
-    # "models": [
-    #     "lstm",
-    #     "multi_channel_lstm",
-    # ],
-    "models": ["multi_channel_lstm"],
+    "models": [
+        "lstm",
+        "multi_channel_lstm",
+    ],
+    # "models": ["multi_channel_lstm"],
     # "models": ["cnn_lstm"],
     #'models': ['attention_lstm'],
     "compare_distributions": False,
     "shuffle": True,
     "sparsity_check": True,  # prints
+    "confusion_matrix": False,
     "model_parameters": {
         "lstm": {  # model config will be input to model __init__
             "n_hidden": 100,
@@ -101,7 +104,7 @@ parameters = {
             "weight_decay": 1e-5,
             "class_weights": [1.0, 3.0],
             "batch_size": 128,
-            "n_epochs": 5,
+            "n_epochs": 1,  # 4
             "gradient_clip_val": 1,
         },
         # "multi_channel_lstm": {
@@ -127,7 +130,7 @@ parameters = {
             "weight_decay": 1e-5,
             "class_weights": [1.0, 3.0],
             "batch_size": 128,
-            "n_epochs": 6,
+            "n_epochs": 1,  # 5
             "gradient_clip_val": 1,
         },
         "cnn_lstm": {
@@ -163,6 +166,37 @@ parameters = {
     },
 }
 
+# make dataset entry a list
+dataset_types = (
+    parameters["dataset_type"]
+    if isinstance(parameters["dataset_type"], list)
+    else [parameters["dataset_type"]]
+)
+
+for ds in dataset_types:
+    parameters["dataset_type"] = ds
+    print(f"\nRunning experiment for dataset type: {ds}")
+    pipe = Pipeline(
+        variables=variables, parameters=parameters, show=True, new_data=True
+    )
+    pipe.prepare_data()
+    # If dataset type is fractional, run fractional experiments:
+    if "fract" in ds:
+        print("Running fractional experiments...")
+        pipe.train_fractional_experiments()
+        pipe.visualize_fraction_results(save_path=f"fraction_results_{ds}.png")
+        print(f"Fractional results visualized and saved for {ds}.")
+        # pipe.memorize_fraction_results(file_path="parameters_fraction_results.csv")
+    else:
+        print("Running regular experiments...")
+        pipe.train()
+        pipe.memorize()
+
+# Optionally, call memorize() for the last run if needed.
+pipe.memorize()
+
+
+# %%
 
 pipe = Pipeline(variables=variables, parameters=parameters, show=True, new_data=True)
 pipe.prepare_data()

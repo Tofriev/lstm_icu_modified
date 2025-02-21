@@ -7,6 +7,9 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from classes.explainer import SHAPExplainer
 import pickle
+import matplotlib.pyplot as plt
+import hashlib
+from copy import deepcopy
 
 
 class Pipeline(object):
@@ -14,30 +17,27 @@ class Pipeline(object):
         self.variables = variables
         self.parameters = parameters
         self.show = show
-        self.cache_file = self.parameters.get("cache_file", "preprocessed_data.pkl")
+        # self.cache_file = self.parameters.get("cache_file", "preprocessed_data.pkl")
         self.force_preprocess = new_data
 
     def prepare_data(self):
-        if os.path.exists(self.cache_file) and not self.force_preprocess:
-            print("Loading preprocessed data from cache...")
-            with open(self.cache_file, "rb") as f:
-                self.DataManager = pickle.load(f)
-        else:
-            print("Preprocessing data from scratch...")
-            self.DataManager = DatasetManager(
-                variables=self.variables, parameters=self.parameters
-            )
-            self.DataManager.load_data()  # Fills self.DataManager.data
-            with open(self.cache_file, "wb") as f:
-                pickle.dump(self.DataManager, f)
-            print("Preprocessed data saved to cache.")
+        # if os.path.exists(self.cache_file) and not self.force_preprocess:
+        #     print("Loading preprocessed data from cache...")
+        #     with open(self.cache_file, "rb") as f:
+        #         self.DataManager = pickle.load(f)
+
+        print("Preprocessing data from scratch...")
+        self.DataManager = DatasetManager(
+            variables=self.variables, parameters=self.parameters
+        )
+        self.DataManager.load_data()
 
         self.feature_names = self.DataManager.feature_names
         self.scaler = self.DataManager.scaler
         self.numerical_features = self.DataManager.numerical_features
 
     def train(self):
-        trainer = Trainer(self.parameters)
+        self.trainer = Trainer(self.parameters)
         dt = self.parameters["dataset_type"]
         # Choose training and testing sets based on the dataset type.
         if dt == "mimic_mimic":
@@ -67,24 +67,82 @@ class Pipeline(object):
         elif dt == "combined_combined":  # Both train and test on combined splits
             train_data = self.DataManager.data["combined"]["sequences_train"]
             test_data = self.DataManager.data["combined"]["sequences_test"]
+        # elif "fract" in dt:
+        #     print("Training fractional experiments...")
+        #     self.train_fractional_experiments()
         else:
             raise ValueError(f"Dataset type {dt} is not supported.")
-
-        self.result_dict, self.trained_models = trainer.train(train_data, test_data)
+        print("Training...")
+        self.result_dict, self.trained_models = self.trainer.train(
+            train_data, test_data
+        )
         self.test_sequences = test_data
 
-    def explain(self, model_name, method, num_samples=1000):
-        explainer = SHAPExplainer(
-            model=self.trained_models[model_name],
-        )
-        explainer.explain(
-            self.test_sequences,
-            self.feature_names,
-            method,
-            num_samples,
-            self.scaler,
-            self.numerical_features,
-        )
+    def train_fractional_experiments(self):
+        self.trainer = Trainer(self.parameters)
+        if "fractional_train" not in self.DataManager.data:
+            raise ValueError(
+                "No fractional datasets found. Make sure 'fract' is in your dataset_type."
+            )
+
+        # Testing is always done on tudd_train test set
+        test_data = self.DataManager.data["tudd"]["sequences_test"]
+        self.fraction_results = {}
+        self.fraction_models = {}
+
+        for fraction_size, train_data in sorted(
+            self.DataManager.data["fractional_train"].items()
+        ):
+            self.trainer = Trainer(self.parameters)
+            print(f"Training with {fraction_size} training samples...")
+            result, model = self.trainer.train(train_data, test_data)
+            self.fraction_results[fraction_size] = deepcopy(result)
+        # self.fraction_models[fraction_size] = deepcopy(model)
+
+    def visualize_fraction_results(self, save_path="fraction_results.png"):
+        if not hasattr(self, "fraction_results") or not self.fraction_results:
+            raise ValueError("No fractional experiment results to visualize.")
+
+        print(f"fraction results: {self.fraction_results}")
+
+        fractions = sorted(self.fraction_results.keys())
+
+        # Get the list of models dynamically from the first available fraction entry
+        first_fraction = fractions[0]
+        models = list(self.fraction_results[first_fraction].keys())
+
+        plt.figure(figsize=(8, 6))
+
+        for model_name in models:
+            aurocs = [
+                self.fraction_results[f][model_name][0]["test_auroc"] for f in fractions
+            ]
+            plt.plot(fractions, aurocs, marker="o", label=model_name)
+
+        plt.xlabel("Number of Training Samples")
+        plt.ylabel("AUROC")
+        plt.title("Model Performance vs. Number of Training Samples")
+
+        if len(models) > 1:
+            plt.legend(title="Models")
+
+        plt.grid(True)
+        plt.savefig(save_path)
+
+        if self.show:
+            plt.show()
+
+    # TODO: needs to be fixed for dict access
+    # def memorize_fraction_results(self, file_path="parameters_fraction_results.csv"):
+    #     fieldnames = ["fraction", "auroc"] + list(self.parameters.keys())
+    #     with open(file_path, mode="a", newline="") as file:
+    #         writer = csv.DictWriter(file, fieldnames=fieldnames)
+    #         if file.tell() == 0:
+    #             writer.writeheader()
+    #         for fraction, result in self.fraction_results.items():
+    #             row = {"fraction": fraction, "auroc": result["auroc"]}
+    #             row.update(self.parameters)
+    #             writer.writerow(row)
 
     def memorize(self, file_path="parameters_results.csv"):
         if self.parameters.get("fractional_steps"):
@@ -111,6 +169,19 @@ class Pipeline(object):
                 if file.tell() == 0:
                     writer.writeheader()
                 writer.writerow(entry)
+
+    def explain(self, model_name, method, num_samples=1000):
+        explainer = SHAPExplainer(
+            model=self.trained_models[model_name],
+        )
+        explainer.explain(
+            self.test_sequences,
+            self.feature_names,
+            method,
+            num_samples,
+            self.scaler,
+            self.numerical_features,
+        )
 
     def visualize_sequences(self):
         if (

@@ -17,6 +17,7 @@ class Trainer:
         self.parameters = parameters
         self.models = parameters["models"]
         self.model_parameters = parameters["model_parameters"]
+        self.cm = parameters["confusion_matrix"]
         self.results = {}
         self.trained_models = {}
 
@@ -47,16 +48,18 @@ class Trainer:
             # )
             logger = TensorBoardLogger("lightning_logs", name=model_name)
 
+            accelerator = "mps" if torch.backends.mps.is_available() else "cpu"
+            print(f"Using accelerator: {accelerator}")
+
             pl_trainer = pl.Trainer(
                 logger=logger,
                 enable_checkpointing=False,
                 # callbacks=[checkpoint_callback],
                 max_epochs=n_epochs,
-                accelerator="mps" if torch.backends.mps.is_available() else "cpu",
+                accelerator=accelerator,
                 devices=1,
                 gradient_clip_val=model_config["gradient_clip_val"],
             )
-            print("Using device:", next(model.parameters()).device)
 
             print("Training sequences sample:")
             print("Train Sequence Shape:", train_sequences[0][0].shape)
@@ -68,44 +71,36 @@ class Trainer:
             self.trained_models[model_name] = model
             self.results[model_name] = result
             # confusion matrix
-            true_labels = []
-            predictions = []
-            print("starting confusion matrix")
-            for batch in data_module.test_dataloader():
-                x = batch["sequence"]
-                y = batch["label"]
-                print("y_shape:", y.shape)
-                y_pred = model(x).argmax(dim=1).cpu().numpy()
-                true_labels.extend(y.cpu().numpy())
-                predictions.extend(y_pred)
-            print("finished confusion matrix")
-            cm = confusion_matrix(true_labels, predictions)
-            print("Confusion Matrix:")
-            print(cm)
-            plt.figure(figsize=(8, 6))
-            sns.heatmap(
-                cm,
-                annot=True,
-                fmt="d",
-                cmap="Blues",
-                xticklabels=["Class 0", "Class 1"],
-                yticklabels=["Class 0", "Class 1"],
-            )
-            plt.title("Confusion Matrix")
-            plt.xlabel("Predicted")
-            plt.ylabel("Actual")
-            plt.show()
+            if self.cm:
+                true_labels = []
+                predictions = []
+                print("starting confusion matrix")
+                for batch in data_module.test_dataloader():
+                    x = batch["sequence"]
+                    y = batch["label"]
+                    print("y_shape:", y.shape)
+                    y_pred = model(x).argmax(dim=1).cpu().numpy()
+                    true_labels.extend(y.cpu().numpy())
+                    predictions.extend(y_pred)
+                print("finished confusion matrix")
+                cm = confusion_matrix(true_labels, predictions)
+                print("Confusion Matrix:")
+                print(cm)
+                plt.figure(figsize=(8, 6))
+                sns.heatmap(
+                    cm,
+                    annot=True,
+                    fmt="d",
+                    cmap="Blues",
+                    xticklabels=["Class 0", "Class 1"],
+                    yticklabels=["Class 0", "Class 1"],
+                )
+                plt.title("Confusion Matrix")
+                plt.xlabel("Predicted")
+                plt.ylabel("Actual")
+                plt.show()
 
-            print("Classification Report:")
-            print(classification_report(true_labels, predictions))
+                print("Classification Report:")
+                print(classification_report(true_labels, predictions))
         print(self.results)
         return self.results, self.trained_models
-
-    def train_fractional(self, sequences):
-        fractional_data = sequences["fractional_mimic_tudd"]
-        fractional_results = {}
-        for fraction, sequence in fractional_data.items():
-            print(f"Training fraction {fraction}")
-            result = self.train(sequence, sequences["tudd"]["test"], return_result=True)
-            fractional_results[fraction] = result[0]
-        return fractional_results

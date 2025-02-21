@@ -47,6 +47,42 @@ class DatasetManager:
         if "combined" in self.dataset_type:
             self.create_combined_splits()
 
+        if "fract" in self.dataset_type:
+            print("Generating fractional datasets...")
+            self.generate_fractions()
+
+    def generate_fractions(self):
+        if "mimic_tudd_fract" in self.dataset_type:
+            train_data_full = (
+                self.data["mimic"]["sequences_train"]
+                + self.data["mimic"]["sequences_test"]
+            )
+            random.shuffle(train_data_full)
+            train_data_for_fractions = self.data["tudd"]["sequences_train"]
+        elif "tudd_fract" in self.dataset_type:
+            train_data_for_fractions = self.data["tudd"]["sequences_train"]
+
+        random.shuffle(train_data_for_fractions)
+
+        n_train = len(train_data_for_fractions)  # - 2000
+        step_size = self.parameters["fractional_steps"]
+        fractional_datasets = {}
+        n_sampled_train_fractions = 0
+
+        while n_sampled_train_fractions + step_size < n_train:
+            n_sampled_train_fractions += step_size
+            # get next batch
+            train_fraction = train_data_for_fractions[:n_sampled_train_fractions]
+            # combined_train_set = mimic_train + tudd_samples
+            if "mimic_tudd_fract" in self.dataset_type:
+                train_combined = train_data_full + train_fraction
+                random.shuffle(train_combined)
+                fractional_datasets[n_sampled_train_fractions] = train_combined
+            else:
+                fractional_datasets[n_sampled_train_fractions] = train_fraction
+
+        self.data["fractional_train"] = fractional_datasets
+
     def create_combined_splits(self):
         """
         Creates combined training and test splits from the already pre-split MIMIC and TUDD data.
