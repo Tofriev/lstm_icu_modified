@@ -36,6 +36,43 @@ class Preprocessor:
         self.make_feature_lists()
         self.imputation = self.parameters["imputation"]
 
+    def print_missing_stats(self, df):
+        # Determine the time column name based on data_type
+        time_col = (
+            "charttime"
+            if self.data_type == "mimic"
+            else "measurement_time_from_admission"
+        )
+        # Use all columns except 'stay_id' and the time column
+        feature_cols = [col for col in df.columns if col in self.ALL_FEATURES]
+
+        # Compute missing counts per row (i.e. per sample)
+        missing_per_row = df[feature_cols].isnull().sum(axis=1)
+        avg_missing_per_row = missing_per_row.mean()
+        avg_missing_per_100 = avg_missing_per_row * 100
+        print(
+            f"Average missing values per 100 samples (rows): {avg_missing_per_100:.2f}"
+        )
+
+        # Compute missingness per sequence (group by stay_id)
+        def seq_missing_info(group):
+            total_cells = group.shape[0] * len(feature_cols)
+            missing_cells = group[feature_cols].isnull().sum().sum()
+            # You can report absolute missing or percentage:
+            pct_missing = (missing_cells / total_cells) * 100
+            return missing_cells, pct_missing
+
+        seq_info = df.groupby("stay_id").apply(seq_missing_info)
+        # Separate the information
+        missing_counts = [info[0] for info in seq_info]
+        missing_pcts = [info[1] for info in seq_info]
+        avg_missing_count_seq = np.mean(missing_counts)
+        avg_missing_pct_seq = np.mean(missing_pcts)
+        print(
+            f"Average missing values per sequence (absolute count): {avg_missing_count_seq:.2f}"
+        )
+        print(f"Average missing percentage per sequence: {avg_missing_pct_seq:.2f}%")
+
     def process(self):
 
         if self.data_type == "mimic":
@@ -81,6 +118,8 @@ class Preprocessor:
         self.variable_conversion_and_aggregation()
         self.create_time_grid()
         self.merge_on_time_grid()
+        print("MIMIC missing values statistics:")
+        self.print_missing_stats(self.data_process["merged"])
         self.impute()
         self.scale_normalize()
         self.create_sequences()
@@ -164,6 +203,7 @@ class Preprocessor:
                     on=["stay_id", "charttime"],
                     how="left",
                 )
+        print(f"merged shape: {merged_df_without_static.shape}")
         # now merge the static data except intime and first day end
         static_columns = [
             col
@@ -286,17 +326,28 @@ class Preprocessor:
         print("checking for stay ids with missing observations for a feature")
         total_stay_ids = df["stay_id"].nunique()
         missing_observations = {}
-        features = [col for col in df.columns if col not in ["stay_id", "charttime"]]
+        features = [col for col in df.columns if col in self.ALL_FEATURES]
 
         for feature in features:
-            missing_count = (
-                df.groupby("stay_id")[feature].apply(lambda x: x.isna().all()).sum()
+            missing_stay_ids = df.groupby("stay_id")[feature].apply(
+                lambda x: x.isna().all()
             )
+            missing_stay_ids = missing_stay_ids[
+                missing_stay_ids
+            ].index.tolist()  # Get missing stay_id list
+
+            missing_count = len(missing_stay_ids)
             percentage = (missing_count / total_stay_ids) * 100
-            missing_observations[feature] = (missing_count, percentage)
-        for feature, (count, percentage) in missing_observations.items():
-            print(f"{feature}: {count} stay_id(s) with no observaions")
-            print(f"{percentage:.2f}% of total stayids")
+            missing_observations[feature] = (
+                missing_count,
+                percentage,
+                missing_stay_ids,
+            )
+
+        for feature, (count, percentage, stay_ids) in missing_observations.items():
+            print(f"{feature}: {count} stay_id(s) with no observations")
+            print(f"{percentage:.2f}% of total stay_ids")
+            print(f"First 100 missing stay IDs for {feature}: {stay_ids[:100]}\n")
 
     def scale_normalize(self):
         df = self.data_process["imputed"].copy()
@@ -338,6 +389,14 @@ class Preprocessor:
             features = group[self.ALL_FEATURES].values
             label = group[f'{self.parameters["target"]}_value'].iloc[0]
             sequences.append((features, label))
+
+            # print(
+            #     f"stay_id: {stay_id}, features shape: {features.shape}, label: {label}"
+            # )
+            # print(f"features: {features}")  # Optional: Print the actual feature values
+            # print(f"label: {label}")  # Optional: Print the label value
+            # sequences.append((features, label))
+            # break
 
         self.feature_index_mapping_sequences = {
             index: feature for index, feature in enumerate(self.ALL_FEATURES)
@@ -419,26 +478,47 @@ class Preprocessor:
 
     def process_tudd(self):
         measurements = self.data_process["pre_processing"]["measurements"].copy()
+        print(f"measurements00: {measurements.head(40)}")
         mortality_info = self.data_process["pre_processing"]["mortality_info"].copy()
 
         # calculate ICU stay duration and measurement offset in hours
-        mortality_info["stay_duration_hours"] = mortality_info["stay_duration"] * 24
+        # reason for adding one to the stay duaration: duiration is that stay_duration in onkly given as full days in real numbers. If stay dration is 0 there might be up to 23 hours of data and so on
+        mortality_info = mortality_info[mortality_info["stay_duration"] != 0]
+
+        # mortality_info["stay_duration_hours"] = (mortality_info["stay_duration"]) * 24
         # in tudd_incomplete.csv the measurement_offset is already in hours
         # measurements["measurement_offset_hours"] = (
         #     measurements["measurement_offset"] * 24
         # )
 
+        print(f"measurements1: {measurements.head(40)}")
         measurements = pd.merge(
             measurements,
-            mortality_info[["caseid", "stay_duration_hours"]],
+            mortality_info[["caseid"]],
             on="caseid",
             how="inner",
         )
-
+        print(f"measurements2: {measurements.head(40)}")
         # calculate measurement time from admission
-        # assuming measurement offset -0 is at admission
+        # assuming measurement offset -0 is at discharge
+        measurements["measurement_offset"] = (
+            measurements["measurement_offset"].str.replace(",", ".").astype(float)
+        )
+        measurements["value"] = (
+            measurements["value"]
+            .str.replace(",", ".")
+            .str.extract(r"([-+]?\d*\.?\d+)", expand=False)
+            .astype(float)
+        )
+
+        # measurements["measurement_time_from_admission"] = measurements[
+        #     "measurement_offset"
+        # ].abs()
+        measurements["min_offset"] = measurements.groupby("caseid")[
+            "measurement_offset"
+        ].transform("min")
         measurements["measurement_time_from_admission"] = (
-            measurements["stay_duration_hours"] + measurements["measurement_offset"]
+            measurements["measurement_offset"] - measurements["min_offset"]
         )
 
         # measurements["measurement_offset"] = pd.to_numeric(
@@ -452,17 +532,19 @@ class Preprocessor:
         measurements = measurements[
             measurements["measurement_time_from_admission"] > -1
         ]
+        print(f"measurements2: {measurements.head(40)}")
         # a little fuzziness is accaptable a the time borders
         measurements.loc[
             measurements["measurement_time_from_admission"] <= -1,
             "measurement_time_from_admission",
         ] = 0
-
+        print(f"measurements3: {measurements.head(40)}")
         # filter first 24 h
         measurements = measurements[
             (measurements["measurement_time_from_admission"] >= 0)
             & (measurements["measurement_time_from_admission"] <= 24)
         ]
+        print(f"measurements4: {measurements.head(40)}")
         measurements["measurement_time_from_admission"] = np.floor(
             measurements["measurement_time_from_admission"]
         )
@@ -476,6 +558,8 @@ class Preprocessor:
             .mean()
             .reset_index()
         )
+        print(f"measurements: {measurements.head(40)}")
+        print(f"measurements_agg: {measurements_agg.head(40)}")
 
         # pivot
         measurements_pivot = measurements_agg.pivot_table(
@@ -483,6 +567,7 @@ class Preprocessor:
             columns="treatmentname",
             values="value",
         ).reset_index()
+        print(f"measurements_pivot: {measurements_pivot.head(40)}")
 
         # make time grid
         def create_time_grid(mortality_info):
@@ -521,6 +606,12 @@ class Preprocessor:
             on="stay_id",
             how="inner",
         )
+        print("TUDD missing values statistics:")
+        self.print_missing_stats(merged_df)
+
+        # print unique treatment names before mapping
+        print("Unique treatment names before mapping:")
+        print(merged_df.columns.unique())
 
         # rename
         treatmentnames_mapping = {
@@ -540,6 +631,11 @@ class Preprocessor:
             "bodyheight": "height_value",
         }
         merged_df.rename(columns=treatmentnames_mapping, inplace=True)
+
+        # print unique treatment names after mapping
+        print("Unique treatment names after mapping:")
+        print(merged_df.columns.unique())
+
         print(
             f'number of unique stay_ids before renaming and bounding: {merged_df["stay_id"].nunique()}'
         )
@@ -605,9 +701,9 @@ class Preprocessor:
 
         for feature, (lower, upper) in bounds.items():
             if feature in merged_df.columns:
+                merged_df[feature] = pd.to_numeric(merged_df[feature], errors="coerce")
                 merged_df.loc[merged_df[feature] < lower, feature] = np.nan
                 merged_df.loc[merged_df[feature] > upper, feature] = np.nan
-        merged_df["gender_value"] = merged_df["gender_value"].map({"m": 0, "w": 1})
 
         print(
             f'number of unique stay_ids before iumputing: {merged_df["stay_id"].nunique()}'
@@ -632,10 +728,12 @@ class Preprocessor:
                 merged_df[self.NUMERICAL_FEATURES] = scaler.fit_transform(
                     merged_df[self.NUMERICAL_FEATURES]
                 )
-
+        print(f"exitus: {merged_df.head(40)}")
+        unique_stays = merged_df.groupby("stay_id").first()
+        exitus_count = unique_stays[unique_stays["exitus"] == 1].shape[0]
+        print(f"Count of exitus == 1: {exitus_count}")
         sequences = []
         for stay_id, group in merged_df.groupby("stay_id"):
-            print(f"length: {len(group)}")
             features = group[self.ALL_FEATURES].values
             label = group["exitus"].iloc[0]
             sequences.append((features, label))
@@ -644,16 +742,17 @@ class Preprocessor:
             index: feature for index, feature in enumerate(self.ALL_FEATURES)
         }
 
-        self.data_process["sequences_test"] = sequences
-        self.data_process["sequences_train"] = []
+        # self.data_process["sequences_test"] = sequences
+        # self.data_process["sequences_train"] = []
 
-        # # split train test
-        # labels = [seq[1] for seq in sequences]
-        # self.data_process["sequences_train"], self.data_process["sequences_test"] = (
-        #     train_test_split(
-        #         self.data_process["sequences"],
-        #         test_size=0.2,
-        #         stratify=labels,
-        #         random_state=42,
-        #     )
-        # )
+        # split train test
+        labels = [seq[1] for seq in sequences]
+        print(f"Number of 1s in labels: {labels.count(1)}")
+        self.data_process["sequences_train"], self.data_process["sequences_test"] = (
+            train_test_split(
+                sequences,
+                test_size=0.2,
+                stratify=labels,
+                random_state=42,
+            )
+        )

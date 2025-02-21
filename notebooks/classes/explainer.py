@@ -57,9 +57,14 @@ class SHAPExplainer:
         if num_samples > len(test_data_np):
             num_samples = len(test_data_np)
 
+        # remaining samples in background? nicht rausnehmen
+
         # take the samples from test data
         test_data_np = test_data_np[:num_samples]
         self.test_data_np = test_data_np
+
+        print(f"Background data shape: {background_data.shape}")
+        print("background data row:\n", background_data_np[0])
 
         print(f"test data shape: {test_data_np.shape}")
         print("test data row:\n", test_data_np[0])
@@ -74,6 +79,7 @@ class SHAPExplainer:
         for i in tqdm(range(0, num_samples, batch_size), desc="Processing Batches"):
             batch = test_data_tensor[i : i + batch_size]
             shap_values_batch = explainer.shap_values(batch)
+            print(shap_values_batch)
             shap_values_batches.append(shap_values_batch)
             print(f"Processed batch {i // batch_size + 1}")
 
@@ -82,6 +88,12 @@ class SHAPExplainer:
             np.concatenate([batch[i] for batch in shap_values_batches], axis=0)
             for i in range(len(shap_values_batches[0]))
         ]
+        print(f"SHAP values shape: {self.shap_values[0][0].shape}")
+        for i in range(len(self.shap_values[0])):
+            vals = self.shap_values[0][i]
+            sum1 = np.sum(vals, axis=1)
+            sum11 = np.sum(sum1)
+            print(f"sum axis 1 {sum11}")
 
         # inspect
         for output_index, sv in enumerate(self.shap_values):
@@ -274,7 +286,7 @@ class SHAPExplainer:
             self.plot_shap_heatmap(feature_names)
         elif method == "plot_single_feature_time_shap":
             self.plot_single_feature_time_shap(
-                sample_idx=1, feature_idx=0, scaler=scaler, feature_name="mps_value"
+                sample_idx=1, feature_idx=-1, scaler=scaler, feature_name="mge_value"
             )
         else:
             raise ValueError(f"Unknown method: {method}")

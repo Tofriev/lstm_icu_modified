@@ -4,6 +4,7 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from classes.preprocessor import Preprocessor
 from utils import set_seed
+import random
 
 set_seed(42)
 
@@ -15,7 +16,7 @@ sys.path.append(project_root)
 class DatasetManager:
     def __init__(self, variables: list, parameters={}):
         # dataset types: mimic_mimic, mimic_tudd, tudd_tudd,
-        # tudd_mimic, fractional_mimic_tudd, fractional_tudd_mimic
+        # tudd_mimic, tudd_fract
         self.mimic_datapath = os.path.join(project_root, "data/raw/mimiciv/first_24h/")
         self.tudd_datapath = os.path.join(project_root, "data/raw/tudd/")
         self.variables = variables
@@ -24,17 +25,82 @@ class DatasetManager:
         self.data = {}
 
     def load_data(self):
-        if "mimic" in self.dataset_type:
+        if "mimic" in self.dataset_type or "combined" in self.dataset_type:
             self.data["mimic"] = {}
             self.load_mimic()
             if self.parameters.get("small_data", False):
                 self.reduce_data()
             self.preprocess("mimic")
+            print(
+                f"MIMIC - Training sequences: {len(self.data['mimic']['sequences_train'])}, Test sequences: {len(self.data['mimic']['sequences_test'])}"
+            )
 
-        if "tudd" in self.dataset_type:
+        if "tudd" in self.dataset_type or "combined" in self.dataset_type:
             self.data["tudd"] = {}
             self.load_tudd()
             self.preprocess("tudd")
+
+            print(
+                f"TUDD - Training sequences: {len(self.data['tudd']['sequences_train'])}, Test sequences: {len(self.data['tudd']['sequences_test'])}"
+            )
+
+        if "combined" in self.dataset_type:
+            self.create_combined_splits()
+
+    def create_combined_splits(self):
+        """
+        Creates combined training and test splits from the already pre-split MIMIC and TUDD data.
+        We take balanced (stratified) samples from mimic["sequences_train"] and tudd["sequences_train"]
+        (and similarly for the test sets) to form the combined splits.
+        """
+        # --- Create combined training set ---
+        mimic_train = self.data["mimic"].get("sequences_train")
+        tudd_train = self.data["tudd"].get("sequences_train")
+        if mimic_train is None or tudd_train is None:
+            raise ValueError(
+                "Both mimic and tudd training sequences must be available."
+            )
+
+        # Determine the maximum number we can take from each so that both sides contribute equally.
+        n_train = min(len(mimic_train), len(tudd_train))
+        print(f"n_train: {n_train}")
+        mimic_train_sample = self.stratified_sample(mimic_train, n_train)
+        tudd_train_sample = self.stratified_sample(tudd_train, n_train)
+        combined_train = mimic_train_sample + tudd_train_sample
+        random.shuffle(combined_train)
+
+        # --- Create combined test set ---
+        mimic_test = self.data["mimic"].get("sequences_test")
+        tudd_test = self.data["tudd"].get("sequences_test")
+        if mimic_test is None or tudd_test is None:
+            raise ValueError("Both mimic and tudd test sequences must be available.")
+
+        n_test = min(len(mimic_test), len(tudd_test))
+        print(f"n_test: {n_test}")
+        mimic_test_sample = self.stratified_sample(mimic_test, n_test)
+        tudd_test_sample = self.stratified_sample(tudd_test, n_test)
+        combined_test = mimic_test_sample + tudd_test_sample
+        random.shuffle(combined_test)
+
+        self.data["combined"] = {
+            "sequences_train": combined_train,
+            "sequences_test": combined_test,
+        }
+        print(
+            f"Combined splits created: {len(combined_train)} training and {len(combined_test)} test sequences."
+        )
+
+    def stratified_sample(self, sequences, sample_count):
+        # If sample_count is the entire dataset length, just return everything.
+        if sample_count == len(sequences):
+            return sequences
+
+        labels = [seq[1] for seq in sequences]
+        # Otherwise, do the usual stratified sampling on a subset
+        _, sample, _, _ = train_test_split(
+            sequences, labels, train_size=sample_count, stratify=labels, random_state=42
+        )
+        return sample
 
     def preprocess(self, data_type: str):
         sequences_dict = {}
@@ -102,16 +168,18 @@ class DatasetManager:
                 )
 
     def load_tudd(self):
-        file_path = os.path.join(self.tudd_datapath, "tudd_incomplete.csv")
+        file_path = os.path.join(self.tudd_datapath, "measurement.csv")
         if os.path.exists(file_path):
-            self.data["tudd"]["measurements"] = pd.read_csv(file_path, sep="|")
+            self.data["tudd"]["measurements"] = pd.read_csv(
+                file_path, sep="|", index_col=False
+            )
         else:
             raise FileNotFoundError(f"{file_path} does not exist.")
-
-        mortality_info_path = os.path.join(self.tudd_datapath, "stays_ane_new.csv")
+        print(self.data["tudd"]["measurements"].head())
+        mortality_info_path = os.path.join(self.tudd_datapath, "stays.csv")
         if os.path.exists(mortality_info_path):
             self.data["tudd"]["mortality_info"] = pd.read_csv(
-                mortality_info_path, sep="|"
+                mortality_info_path, sep="|", index_col=False
             )
         else:
             raise FileNotFoundError(f"{mortality_info_path} does not exist.")

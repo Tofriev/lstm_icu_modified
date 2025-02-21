@@ -60,12 +60,17 @@ n_features = count_features(variables)
 parameters = {
     "target": "mortality",
     # "dataset_type": "tudd_tudd",
-    "dataset_type": "mimic_mimic",
-    #'dataset_type': 'tudd_mimic',
+    # "dataset_type": "mimic_mimic",
+    # "dataset_type": "tudd_mimic",
     # "dataset_type": "mimic_tudd",
-    # "dataset_type": "mimic_tudd_fract",
-    #'fractional_steps': 1000, # example for mimic_tudd: adds 1000 samples from tudd train to the training set of mimic for every fraction
-    "small_data": True,  # not implemented for tudd yet
+    # "dataset_type": "mimic_combined",
+    # "dataset_type": "tudd_combined",
+    # "dataset_type": "combined_combined",
+    # "dataset_type": "combined_mimic",
+    # "dataset_type": "combined_tudd",
+    "dataset_type": "tudd_fract",
+    "fractional_steps": 1000,  # example for mimic_tudd: adds 1000 samples from tudd train to the training set of mimic for every fraction. maybe try with 200.
+    "small_data": False,  # not implemented for tudd yet
     "aggregation_frequency": "H",
     "imputation": {
         "method": "ffill_bfill"
@@ -74,12 +79,12 @@ parameters = {
     #'scaling_range': [0, 1],
     #'n_features': n_features,
     "n_features": n_features,
-    "models": ["lstm"],
+    # "models": ["lstm"],
     # "models": [
     #     "lstm",
     #     "multi_channel_lstm",
     # ],
-    # "models": ["multi_channel_lstm"],
+    "models": ["multi_channel_lstm"],
     # "models": ["cnn_lstm"],
     #'models': ['attention_lstm'],
     "compare_distributions": False,
@@ -99,9 +104,22 @@ parameters = {
             "n_epochs": 5,
             "gradient_clip_val": 1,
         },
+        # "multi_channel_lstm": {
+        #     "n_hidden": 100,
+        #     "n_layers": 1,
+        #     "n_classes": 2,  # also adjust the steps in lstm model for correct auroc calculation if this changes
+        #     "dropout": 0.75,
+        #     "bidirectional": True,
+        #     "learning_rate": 1e-4,
+        #     "weight_decay": 1e-5,
+        #     "class_weights": [1.0, 3.0],
+        #     "batch_size": 128,
+        #     "n_epochs": 3,
+        #     "gradient_clip_val": 1,
+        # },
         "multi_channel_lstm": {
             "n_hidden": 100,
-            "n_layers": 1,
+            "n_layers": 2,
             "n_classes": 2,  # also adjust the steps in lstm model for correct auroc calculation if this changes
             "dropout": 0.75,
             "bidirectional": True,
@@ -109,7 +127,7 @@ parameters = {
             "weight_decay": 1e-5,
             "class_weights": [1.0, 3.0],
             "batch_size": 128,
-            "n_epochs": 3,
+            "n_epochs": 6,
             "gradient_clip_val": 1,
         },
         "cnn_lstm": {
@@ -146,13 +164,14 @@ parameters = {
 }
 
 
-pipe = Pipeline(variables=variables, parameters=parameters, show=True)
+pipe = Pipeline(variables=variables, parameters=parameters, show=True, new_data=True)
 pipe.prepare_data()
 # pipe.visualize_sequences()
 pipe.train()
-# pipe.explain(model_name="lstm", method="heatmap_SHAP", num_samples=100)
-pipe.explain(model_name="lstm", method="plot_single_feature_time_shap", num_samples=100)
 # pipe.memorize()
+# pipe.explain(model_name="lstm", method="heatmap_SHAP", num_samples=100)
+# pipe.explain(model_name="lstm", method="plot_single_feature_time_shap", num_samples=100)
+
 
 # print(pipe.result_dict)
 # ['mbp_value', 'gcs_total_value', 'glc_value', 'creatinine_value', 'potassium_value', 'hr_value', 'wbc_value', 'platelets_value', 'inr_value', 'anion_gap_value', 'lactate_value', 'temperature_value', 'weight_value', 'age_value', 'gender_value']

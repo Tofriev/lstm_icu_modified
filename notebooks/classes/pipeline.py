@@ -6,66 +6,72 @@ import csv
 import matplotlib.pyplot as plt
 import seaborn as sns
 from classes.explainer import SHAPExplainer
+import pickle
 
 
 class Pipeline(object):
-    def __init__(self, variables, parameters, show=False):
+    def __init__(self, variables, parameters, show=False, new_data=True):
         self.variables = variables
         self.parameters = parameters
         self.show = show
+        self.cache_file = self.parameters.get("cache_file", "preprocessed_data.pkl")
+        self.force_preprocess = new_data
 
     def prepare_data(self):
-        self.DataManager = DatasetManager(
-            variables=self.variables, parameters=self.parameters
-        )
-        self.DataManager.load_data()  # DataManager.data holds all data afterwards
+        if os.path.exists(self.cache_file) and not self.force_preprocess:
+            print("Loading preprocessed data from cache...")
+            with open(self.cache_file, "rb") as f:
+                self.DataManager = pickle.load(f)
+        else:
+            print("Preprocessing data from scratch...")
+            self.DataManager = DatasetManager(
+                variables=self.variables, parameters=self.parameters
+            )
+            self.DataManager.load_data()  # Fills self.DataManager.data
+            with open(self.cache_file, "wb") as f:
+                pickle.dump(self.DataManager, f)
+            print("Preprocessed data saved to cache.")
+
         self.feature_names = self.DataManager.feature_names
-        self.scaler = self.DataManager.scaler  # mimic scaler
+        self.scaler = self.DataManager.scaler
         self.numerical_features = self.DataManager.numerical_features
-        # if self.show:
-        #     seq, label = self.sequences['train'][0]
-        #     print(seq.shape)
-        #     print(label.shape)
-        #     print(dict(
-        #         sequence=torch.tensor(seq, dtype=torch.float32),
-        #         label=torch.tensor(label).long(),
-        #         ))
 
     def train(self):
         trainer = Trainer(self.parameters)
-        if self.parameters[
-            "dataset_type"
-        ] == "mimic_tudd_fract" and self.parameters.get("fractional_steps"):
-            print("Training fractional")
-            self.result_dict, self.trained_models = trainer.train_fractional(
-                self.sequences
-            )
+        dt = self.parameters["dataset_type"]
+        # Choose training and testing sets based on the dataset type.
+        if dt == "mimic_mimic":
+            train_data = self.DataManager.data["mimic"]["sequences_train"]
+            test_data = self.DataManager.data["mimic"]["sequences_test"]
+        elif dt == "tudd_tudd":
+            train_data = self.DataManager.data["tudd"]["sequences_train"]
+            test_data = self.DataManager.data["tudd"]["sequences_test"]
+        elif dt == "mimic_tudd":
+            train_data = self.DataManager.data["mimic"]["sequences_train"]
+            test_data = self.DataManager.data["tudd"]["sequences_test"]
+        elif dt == "tudd_mimic":
+            train_data = self.DataManager.data["tudd"]["sequences_train"]
+            test_data = self.DataManager.data["mimic"]["sequences_test"]
+        elif dt == "mimic_combined":  # Train on mimic only; test on combined
+            train_data = self.DataManager.data["mimic"]["sequences_train"]
+            test_data = self.DataManager.data["combined"]["sequences_test"]
+        elif dt == "tudd_combined":  # Train on tudd only; test on combined
+            train_data = self.DataManager.data["tudd"]["sequences_train"]
+            test_data = self.DataManager.data["combined"]["sequences_test"]
+        elif dt == "combined_mimic":  # Train on combined; test on mimic
+            train_data = self.DataManager.data["combined"]["sequences_train"]
+            test_data = self.DataManager.data["mimic"]["sequences_test"]
+        elif dt == "combined_tudd":  # Train on combined; test on tudd
+            train_data = self.DataManager.data["combined"]["sequences_train"]
+            test_data = self.DataManager.data["tudd"]["sequences_test"]
+        elif dt == "combined_combined":  # Both train and test on combined splits
+            train_data = self.DataManager.data["combined"]["sequences_train"]
+            test_data = self.DataManager.data["combined"]["sequences_test"]
+        else:
+            raise ValueError(f"Dataset type {dt} is not supported.")
 
-        elif self.parameters["dataset_type"] == "mimic_mimic":
-            self.result_dict, self.trained_models = trainer.train(
-                self.DataManager.data["mimic"]["sequences_train"],
-                self.DataManager.data["mimic"]["sequences_test"],
-            )
-            self.test_sequences = self.DataManager.data["mimic"]["sequences_test"]
-
-        elif self.parameters["dataset_type"] == "tudd_tudd":
-            self.result_dict, self.trained_models = trainer.train(
-                self.DataManager.data["tudd"]["sequences_train"],
-                self.DataManager.data["tudd"]["sequences_test"],
-            )
-            self.test_sequences = self.DataManager.data["tudd"]["sequences_test"]
-        elif self.parameters["dataset_type"] == "mimic_tudd":
-            self.result_dict, self.trained_models = trainer.train(
-                self.DataManager.data["mimic"]["sequences_train"],
-                self.DataManager.data["tudd"]["sequences_test"],
-            )
-            self.test_sequences = self.DataManager.data["tudd"]["sequences_test"]
-        elif self.parameters["dataset_type"] == "tudd_mimic":
-            self.result_dict, self.trained_models = trainer.train(
-                self.DataManager.data["tudd"]["sequences_train"],
-                self.DataManager.data["mimic"]["sequences_test"],
-            )
-            self.test_sequences = self.DataManager.data["mimic"]["sequences_test"]
+        self.result_dict, self.trained_models = trainer.train(train_data, test_data)
+        self.test_sequences = test_data
 
     def explain(self, model_name, method, num_samples=1000):
         explainer = SHAPExplainer(
