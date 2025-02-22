@@ -68,10 +68,13 @@ parameters = {
     # "dataset_type": "combined_combined",
     # "dataset_type": "combined_mimic",
     # "dataset_type": "combined_tudd",
-    "dataset_type": ["tudd_fract", "mimic_tudd_fract"],
+    "dataset_type": [
+        # "tudd_fract",
+        "mimic_tudd_fract"
+    ],
     #'dataset_type': 'mimic_tudd_fract',
     # "dataset_type": "mimic_tudd_fract",
-    "fractional_steps": 20000,  # example for mimic_tudd: adds 1000 samples from tudd train to the training set of mimic for every fraction. maybe try with 200.
+    "fractional_steps": 1000,  # example for mimic_tudd: adds 1000 samples from tudd train to the training set of mimic for every fraction. maybe try with 200.
     "small_data": False,  # not implemented for tudd yet
     "aggregation_frequency": "H",
     "imputation": {
@@ -104,7 +107,7 @@ parameters = {
             "weight_decay": 1e-5,
             "class_weights": [1.0, 3.0],
             "batch_size": 128,
-            "n_epochs": 1,  # 4
+            "n_epochs": 4,  # 4
             "gradient_clip_val": 1,
         },
         # "multi_channel_lstm": {
@@ -130,7 +133,7 @@ parameters = {
             "weight_decay": 1e-5,
             "class_weights": [1.0, 3.0],
             "batch_size": 128,
-            "n_epochs": 1,  # 5
+            "n_epochs": 5,  # 5
             "gradient_clip_val": 1,
         },
         "cnn_lstm": {
@@ -192,8 +195,8 @@ for ds in dataset_types:
         pipe.train()
         pipe.memorize()
 
-# Optionally, call memorize() for the last run if needed.
-pipe.memorize()
+# Optionally, call memorize() for the last run if needed
+# pipe.memorize()
 
 
 # %%

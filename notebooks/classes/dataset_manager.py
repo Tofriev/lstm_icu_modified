@@ -55,7 +55,7 @@ class DatasetManager:
         if "mimic_tudd_fract" in self.dataset_type:
             train_data_full = (
                 self.data["mimic"]["sequences_train"]
-                + self.data["mimic"]["sequences_test"]
+                #  + self.data["mimic"]["sequences_test"]
             )
             random.shuffle(train_data_full)
             train_data_for_fractions = self.data["tudd"]["sequences_train"]
@@ -64,24 +64,23 @@ class DatasetManager:
 
         random.shuffle(train_data_for_fractions)
 
-        n_train = len(train_data_for_fractions)  # - 2000
+        self.data["tudd_train_all"] = train_data_for_fractions
+
+        if "mimic_tudd_fract" in self.dataset_type:
+            self.data["mimic_train_all"] = train_data_full
+
+        n_train = len(train_data_for_fractions)
         step_size = self.parameters["fractional_steps"]
-        fractional_datasets = {}
-        n_sampled_train_fractions = 0
 
-        while n_sampled_train_fractions + step_size < n_train:
-            n_sampled_train_fractions += step_size
-            # get next batch
-            train_fraction = train_data_for_fractions[:n_sampled_train_fractions]
-            # combined_train_set = mimic_train + tudd_samples
-            if "mimic_tudd_fract" in self.dataset_type:
-                train_combined = train_data_full + train_fraction
-                random.shuffle(train_combined)
-                fractional_datasets[n_sampled_train_fractions] = train_combined
-            else:
-                fractional_datasets[n_sampled_train_fractions] = train_fraction
+        fractional_indices = {}
+        n_sampled = 0
 
-        self.data["fractional_train"] = fractional_datasets
+        while n_sampled + step_size < n_train:
+            n_sampled += step_size
+            # store the indexes only to avoid memory issues
+            fractional_indices[n_sampled] = list(range(n_sampled))
+
+        self.data["fractional_indices"] = fractional_indices
 
     def create_combined_splits(self):
         """

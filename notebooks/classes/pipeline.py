@@ -10,6 +10,9 @@ import pickle
 import matplotlib.pyplot as plt
 import hashlib
 from copy import deepcopy
+import random
+import gc
+import torch
 
 
 class Pipeline(object):
@@ -79,25 +82,49 @@ class Pipeline(object):
         self.test_sequences = test_data
 
     def train_fractional_experiments(self):
-        self.trainer = Trainer(self.parameters)
-        if "fractional_train" not in self.DataManager.data:
+        if "fractional_indices" not in self.DataManager.data:
             raise ValueError(
-                "No fractional datasets found. Make sure 'fract' is in your dataset_type."
+                "No fractional indices found. Make sure 'fract' is in your dataset_type."
             )
 
-        # Testing is always done on tudd_train test set
+        # always test on TUDD test
         test_data = self.DataManager.data["tudd"]["sequences_test"]
-        self.fraction_results = {}
-        self.fraction_models = {}
+        tudd_all = self.DataManager.data["tudd_train_all"]
 
-        for fraction_size, train_data in sorted(
-            self.DataManager.data["fractional_train"].items()
-        ):
-            self.trainer = Trainer(self.parameters)
-            print(f"Training with {fraction_size} training samples...")
-            result, model = self.trainer.train(train_data, test_data)
+        mimic_all = []
+        if "mimic_tudd_fract" in self.parameters["dataset_type"]:
+            mimic_all = self.DataManager.data["mimic_train_all"]
+
+        self.fraction_results = {}
+        # self.fraction_models = {}
+
+        fractional_indices = self.DataManager.data["fractional_indices"]
+
+        for fraction_size in sorted(fractional_indices.keys()):
+            print(
+                f"\nTraining with fraction_size = {fraction_size} training samples..."
+            )
+
+            # build tudd from indices
+            idx_list = fractional_indices[fraction_size]
+            fraction_data = [tudd_all[i] for i in idx_list]
+
+            if "mimic_tudd_fract" in self.parameters["dataset_type"]:
+                fraction_data = mimic_all + fraction_data
+                random.shuffle(fraction_data)
+
+            print(f"Length of fraction_data: {len(fraction_data)}")
+
+            local_trainer = Trainer(self.parameters)
+            result, model = local_trainer.train(fraction_data, test_data)
+
             self.fraction_results[fraction_size] = deepcopy(result)
-        # self.fraction_models[fraction_size] = deepcopy(model)
+            # self.fraction_models[fraction_size] = deepcopy(model)
+
+            del fraction_data
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
     def visualize_fraction_results(self, save_path="fraction_results.png"):
         if not hasattr(self, "fraction_results") or not self.fraction_results:
