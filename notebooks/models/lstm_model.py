@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import pytorch_lightning as pl
+import torch.utils.checkpoint as checkpoint
 from torchmetrics.functional import auroc
 from utils import set_seed
 
@@ -23,6 +24,7 @@ class LSTMModel(pl.LightningModule):
     ):
         super().__init__()
         self.save_hyperparameters()
+
         self.lstm = nn.LSTM(
             input_size=n_features,
             hidden_size=n_hidden,
@@ -33,20 +35,29 @@ class LSTMModel(pl.LightningModule):
         )
         hidden_size = n_hidden * (2 if bidirectional else 1)
         self.classifier = nn.Linear(hidden_size, n_classes)
+
         class_weights_tensor = torch.tensor(class_weights) if class_weights else None
         self.criterion = nn.CrossEntropyLoss(weight=class_weights_tensor)
+
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
 
-    def forward(self, x):
+    def forward_lstm_pass(self, x):
+        # Helper so we can wrap the LSTM in checkpoint
         self.lstm.flatten_parameters()
-        _, (hidden, _) = self.lstm(x)
+        return self.lstm(x)  # returns (lstm_out, (hidden, cell))
+
+    def forward(self, x):
+        # Wrap the LSTM pass in gradient checkpointing
+        lstm_out, (hidden, _) = checkpoint.checkpoint(self.forward_lstm_pass, x)
+
         if self.hparams.bidirectional:
             hidden_fwd = hidden[-2]
             hidden_bwd = hidden[-1]
             out = torch.cat((hidden_fwd, hidden_bwd), dim=1)
         else:
             out = hidden[-1]
+
         return self.classifier(out)
 
     def training_step(self, batch, batch_idx):
@@ -57,6 +68,7 @@ class LSTMModel(pl.LightningModule):
         loss = self.criterion(outputs, labels)
         probabilities = torch.softmax(outputs, dim=1)[:, 1]
         step_auroc = auroc(probabilities, labels, task="binary")
+
         self.log(
             "train_loss", loss, prog_bar=True, logger=True, on_step=False, on_epoch=True
         )
@@ -77,6 +89,7 @@ class LSTMModel(pl.LightningModule):
         loss = self.criterion(outputs, labels)
         probabilities = torch.softmax(outputs, dim=1)[:, 1]
         step_auroc = auroc(probabilities, labels, task="binary")
+
         self.log(
             "val_loss", loss, prog_bar=True, logger=True, on_step=False, on_epoch=True
         )
@@ -96,6 +109,7 @@ class LSTMModel(pl.LightningModule):
         loss = self.criterion(outputs, labels)
         probabilities = torch.softmax(outputs, dim=1)[:, 1]
         step_auroc = auroc(probabilities, labels, task="binary")
+
         self.log(
             "test_loss", loss, prog_bar=True, logger=True, on_step=False, on_epoch=True
         )
@@ -109,7 +123,8 @@ class LSTMModel(pl.LightningModule):
         )
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(
-            self.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay
+        return torch.optim.Adam(
+            self.parameters(),
+            lr=self.learning_rate,
+            weight_decay=self.weight_decay,
         )
-        return optimizer
