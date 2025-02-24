@@ -125,7 +125,7 @@ class SHAPExplainer:
             show=True,
         )
 
-    def plot_shap_heatmap(self, feature_names):
+    def plot_shap_heatmap_feature_rank(self, feature_names):
         """
         Plot a heatmap showing the mean feature rank in importance for each timestep,
         with features sorted by overall importance (first rank across all timesteps).
@@ -167,7 +167,7 @@ class SHAPExplainer:
         plt.figure(figsize=(10, 8))
         sns.heatmap(
             df,
-            cmap="RdBu",
+            cmap="Reds",
             annot=False,
             fmt=".2f",
             cbar_kws={"label": "Mean Rank"},
@@ -175,6 +175,56 @@ class SHAPExplainer:
         plt.title("SHAP Heatmap (Mean Feature Rank in Importance)")
         plt.xlabel("Time Steps")
         plt.ylabel("Features (Sorted by Overall Importance)")
+        plt.show()
+
+    def plot_shap_heatmap_mean_abs(self, feature_names):
+        """
+        Plot a heatmap showing the mean absolute SHAP score for each feature at each timestep,
+        with features sorted by overall mean absolute SHAP importance.
+        """
+        print("Plotting SHAP heatmap (mean absolute SHAP)...")
+
+        if self.shap_values is None:
+            raise ValueError(
+                "SHAP values have not been extracted. Run extract_shap_values first."
+            )
+
+        # shape: (num_samples, time_steps, num_features)
+        shap_values = np.abs(self.shap_values[1])
+
+        # Compute mean absolute SHAP scores per time step (average over samples)
+        # Resulting shape: (time_steps, num_features)
+        mean_abs_shap = shap_values.mean(axis=0)
+
+        # Compute overall mean absolute SHAP per feature (average over time)
+        overall_mean_abs = mean_abs_shap.mean(axis=0)
+
+        # Sort features by overall mean absolute SHAP (highest importance first)
+        sorted_indices = np.argsort(overall_mean_abs)[::-1]
+        sorted_feature_names = [feature_names[i] for i in sorted_indices]
+
+        # Rearrange the mean absolute SHAP matrix accordingly and transpose it
+        # so that rows represent features and columns represent time steps
+        sorted_mean_abs_shap = mean_abs_shap[:, sorted_indices].T
+
+        time_steps = sorted_mean_abs_shap.shape[1]
+        df = pd.DataFrame(
+            sorted_mean_abs_shap,
+            index=sorted_feature_names,
+            columns=[f"Time {i}" for i in range(time_steps)],
+        )
+
+        plt.figure(figsize=(10, 8))
+        sns.heatmap(
+            df,
+            cmap="Reds",
+            annot=False,
+            fmt=".2f",
+            cbar_kws={"label": "Mean Absolute SHAP Score"},
+        )
+        plt.title("SHAP Heatmap (Mean Absolute SHAP Score)")
+        plt.xlabel("Time Steps")
+        plt.ylabel("Features (Sorted by Overall Mean Absolute SHAP)")
         plt.show()
 
     def plot_single_feature_time_shap(
@@ -283,7 +333,9 @@ class SHAPExplainer:
         if method == "ordinary_SHAP":
             self.explain_with_ordinary_SHAP(feature_names)
         elif method == "heatmap_SHAP":
-            self.plot_shap_heatmap(feature_names)
+            self.plot_shap_heatmap_mean_abs(feature_names)
+        elif method == "feature_rank_heatmap_SHAP":
+            self.plot_shap_heatmap_feature_rank(feature_names)
         elif method == "plot_single_feature_time_shap":
             self.plot_single_feature_time_shap(
                 sample_idx=1, feature_idx=-1, scaler=scaler, feature_name="mge_value"

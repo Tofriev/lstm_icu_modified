@@ -67,37 +67,37 @@ class Trainer:
 
             self.trained_models[model_name] = model
             self.results[model_name] = result
-            # confusion matrix
-            true_labels = []
-            predictions = []
-            print("starting confusion matrix")
-            for batch in data_module.test_dataloader():
-                x = batch["sequence"]
-                y = batch["label"]
-                print("y_shape:", y.shape)
-                y_pred = model(x).argmax(dim=1).cpu().numpy()
-                true_labels.extend(y.cpu().numpy())
-                predictions.extend(y_pred)
-            print("finished confusion matrix")
-            cm = confusion_matrix(true_labels, predictions)
-            print("Confusion Matrix:")
-            print(cm)
-            plt.figure(figsize=(8, 6))
-            sns.heatmap(
-                cm,
-                annot=True,
-                fmt="d",
-                cmap="Blues",
-                xticklabels=["Class 0", "Class 1"],
-                yticklabels=["Class 0", "Class 1"],
-            )
-            plt.title("Confusion Matrix")
-            plt.xlabel("Predicted")
-            plt.ylabel("Actual")
-            plt.show()
+            # # confusion matrix
+            # true_labels = []
+            # predictions = []
+            # print("starting confusion matrix")
+            # for batch in data_module.test_dataloader():
+            #     x = batch["sequence"]
+            #     y = batch["label"]
+            #     print("y_shape:", y.shape)
+            #     y_pred = model(x).argmax(dim=1).cpu().numpy()
+            #     true_labels.extend(y.cpu().numpy())
+            #     predictions.extend(y_pred)
+            # print("finished confusion matrix")
+            # cm = confusion_matrix(true_labels, predictions)
+            # print("Confusion Matrix:")
+            # print(cm)
+            # plt.figure(figsize=(8, 6))
+            # sns.heatmap(
+            #     cm,
+            #     annot=True,
+            #     fmt="d",
+            #     cmap="Blues",
+            #     xticklabels=["Class 0", "Class 1"],
+            #     yticklabels=["Class 0", "Class 1"],
+            # )
+            # plt.title("Confusion Matrix")
+            # plt.xlabel("Predicted")
+            # plt.ylabel("Actual")
+            # plt.show()
 
-            print("Classification Report:")
-            print(classification_report(true_labels, predictions))
+            # print("Classification Report:")
+            # print(classification_report(true_labels, predictions))
         print(self.results)
         return self.results, self.trained_models
 

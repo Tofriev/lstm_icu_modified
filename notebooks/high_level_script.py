@@ -60,7 +60,7 @@ n_features = count_features(variables)
 parameters = {
     "target": "mortality",
     # "dataset_type": "tudd_tudd",
-    # "dataset_type": "mimic_mimic",
+    "dataset_type": "mimic_mimic",
     # "dataset_type": "tudd_mimic",
     # "dataset_type": "mimic_tudd",
     # "dataset_type": "mimic_combined",
@@ -68,7 +68,7 @@ parameters = {
     # "dataset_type": "combined_combined",
     # "dataset_type": "combined_mimic",
     # "dataset_type": "combined_tudd",
-    "dataset_type": "tudd_fract",
+    # "dataset_type": "tudd_fract",
     "fractional_steps": 1000,  # example for mimic_tudd: adds 1000 samples from tudd train to the training set of mimic for every fraction. maybe try with 200.
     "small_data": False,  # not implemented for tudd yet
     "aggregation_frequency": "H",
@@ -79,12 +79,12 @@ parameters = {
     #'scaling_range': [0, 1],
     #'n_features': n_features,
     "n_features": n_features,
-    # "models": ["lstm"],
+    "models": ["lstm"],
     # "models": [
     #     "lstm",
     #     "multi_channel_lstm",
     # ],
-    "models": ["multi_channel_lstm"],
+    # "models": ["multi_channel_lstm"],
     # "models": ["cnn_lstm"],
     #'models': ['attention_lstm'],
     "compare_distributions": False,
@@ -169,7 +169,7 @@ pipe.prepare_data()
 # pipe.visualize_sequences()
 pipe.train()
 # pipe.memorize()
-# pipe.explain(model_name="lstm", method="heatmap_SHAP", num_samples=100)
+pipe.explain(model_name="lstm", method="heatmap_SHAP", num_samples=10)
 # pipe.explain(model_name="lstm", method="plot_single_feature_time_shap", num_samples=100)
 
 
