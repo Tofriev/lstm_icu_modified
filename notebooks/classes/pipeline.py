@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from classes.explainer import SHAPExplainer
 import pickle
+import copy
 
 
 class Pipeline(object):
@@ -149,3 +150,66 @@ class Pipeline(object):
                 plt.ylabel("Density")
                 plt.legend()
                 plt.show()
+
+
+class MultiDatasetPipeline(Pipeline):
+    def __init__(self, variables, parameters, dataset_types, show=False, new_data=True):
+        # Note: we call the base Pipeline __init__ only for attributes we need.
+        super().__init__(variables, parameters, show, new_data)
+        self.dataset_types = dataset_types
+        self.data_managers = (
+            {}
+        )  # Will hold preprocessed DatasetManager objects per dataset_type
+
+    def prepare_data(self):
+        # Loop over each dataset type and load (or preprocess) its data only once.
+        for ds in self.dataset_types:
+            cache_file = f"preprocessed_data_{ds}.pkl"
+            if os.path.exists(cache_file) and not self.force_preprocess:
+                print(f"Loading preprocessed data for '{ds}' from cache...")
+                with open(cache_file, "rb") as f:
+                    self.data_managers[ds] = pickle.load(f)
+            else:
+                print(f"Preprocessing data for '{ds}' from scratch...")
+                # Create a temporary copy of the parameters for this dataset type.
+                params_ds = copy.deepcopy(self.parameters)
+                params_ds["dataset_type"] = ds
+                # Optionally, you can set a specific cache file for each dataset.
+                params_ds["cache_file"] = cache_file
+                dm = DatasetManager(variables=self.variables, parameters=params_ds)
+                dm.load_data()
+                self.data_managers[ds] = dm
+                with open(cache_file, "wb") as f:
+                    pickle.dump(dm, f)
+                print(f"Preprocessed data for '{ds}' saved to cache.")
+
+    def run_all(self, model_list, memorize=False, explain_method=None, num_samples=10):
+        all_results = {}
+        # Loop over each dataset type.
+        for ds, dm in self.data_managers.items():
+            print(f"\n=== Running experiments for dataset '{ds}' ===")
+            # Set the data manager for this run.
+            self.DataManager = dm
+            # Loop over each model.
+            for model in model_list:
+                # Update parameters for the current run.
+                self.parameters["dataset_type"] = ds
+                self.parameters["models"] = [model]
+                print(f"\n--- Training with model '{model}' on dataset '{ds}' ---")
+                # Train the model using the already loaded data.
+                self.train()
+                if explain_method:
+                    # Explain the model using the already loaded data.
+                    self.explain(
+                        model_name=model, method=explain_method, num_samples=num_samples
+                    )
+                if memorize:
+                    self.memorize()
+                # Store results for further inspection.
+                all_results[(ds, model)] = {
+                    "result_dict": self.result_dict,
+                    "trained_model": self.trained_models,
+                }
+                print("Result:", self.result_dict)
+                print("Trained Models:", self.trained_models)
+        return all_results

@@ -167,7 +167,7 @@ class SHAPExplainer:
         plt.figure(figsize=(10, 8))
         sns.heatmap(
             df,
-            cmap="Reds",
+            cmap="Reds_r",
             annot=False,
             fmt=".2f",
             cbar_kws={"label": "Mean Rank"},
