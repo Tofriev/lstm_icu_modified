@@ -65,13 +65,13 @@ parameters = {
     # "dataset_type": "mimic_tudd",
     # "dataset_type": "mimic_combined",
     # "dataset_type": "tudd_combined",
-    # "dataset_type": "combined_combined",
+    "dataset_type": ["combined_combined", "combined_mimic", "combined_tudd"],
     # "dataset_type": "combined_mimic",
     # "dataset_type": "combined_tudd",
-    "dataset_type": [
-        # "tudd_fract",
-        "mimic_tudd_fract"
-    ],
+    # "dataset_type": [
+    #     # "tudd_fract",
+    #     "mimic_tudd_fract"
+    # ],
     #'dataset_type': 'mimic_tudd_fract',
     # "dataset_type": "mimic_tudd_fract",
     "fractional_steps": 1000,  # example for mimic_tudd: adds 1000 samples from tudd train to the training set of mimic for every fraction. maybe try with 200.

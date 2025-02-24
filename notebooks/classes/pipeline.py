@@ -99,7 +99,7 @@ class Pipeline(object):
         # self.fraction_models = {}
 
         fractional_indices = self.DataManager.data["fractional_indices"]
-
+        random.seed(42)
         for fraction_size in sorted(fractional_indices.keys()):
             print(
                 f"\nTraining with fraction_size = {fraction_size} training samples..."
@@ -111,7 +111,7 @@ class Pipeline(object):
 
             if "mimic_tudd_fract" in self.parameters["dataset_type"]:
                 fraction_data = mimic_all + fraction_data
-                random.shuffle(fraction_data)
+                # random.shuffle(fraction_data)
 
             print(f"Length of fraction_data: {len(fraction_data)}")
 
@@ -119,12 +119,12 @@ class Pipeline(object):
             result, model = local_trainer.train(fraction_data, test_data)
 
             self.fraction_results[fraction_size] = deepcopy(result)
-            # self.fraction_models[fraction_size] = deepcopy(model)
 
+            del local_trainer
+            del model
             del fraction_data
             gc.collect()
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
+            torch.mps.empty_cache()
 
     def visualize_fraction_results(self, save_path="fraction_results.png"):
         if not hasattr(self, "fraction_results") or not self.fraction_results:

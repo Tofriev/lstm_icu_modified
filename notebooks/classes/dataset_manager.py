@@ -45,7 +45,9 @@ class DatasetManager:
             )
 
         if "combined" in self.dataset_type:
-            self.create_combined_splits()
+            print("combining datasets...")
+            # self.create_combined_splits()
+            self.create_combined_splits_5050()
 
         if "fract" in self.dataset_type:
             print("Generating fractional datasets...")
@@ -69,7 +71,7 @@ class DatasetManager:
         if "mimic_tudd_fract" in self.dataset_type:
             self.data["mimic_train_all"] = train_data_full
 
-        n_train = len(train_data_for_fractions)
+        n_train = len(train_data_for_fractions)  # -1000
         step_size = self.parameters["fractional_steps"]
 
         fractional_indices = {}
@@ -83,6 +85,27 @@ class DatasetManager:
         self.data["fractional_indices"] = fractional_indices
 
     def create_combined_splits(self):
+        print("start creating combined splits")
+        mimic_train = self.data["mimic"].get("sequences_train")
+        tudd_train = self.data["tudd"].get("sequences_train")
+
+        combined_train = mimic_train + tudd_train
+        random.shuffle(combined_train)
+        print("created combined train")
+        mimic_test = self.data["mimic"].get("sequences_test")
+        tudd_test = self.data["tudd"].get("sequences_test")
+        combined_test = mimic_test + tudd_test
+        random.shuffle(combined_test)
+        print("created combined test")
+        self.data["combined"] = {
+            "sequences_train": combined_train,
+            "sequences_test": combined_test,
+        }
+        print(
+            f"Combined splits created: {len(combined_train)} training and {len(combined_test)} test sequences."
+        )
+
+    def create_combined_splits_5050(self):
         """
         Creates combined training and test splits from the already pre-split MIMIC and TUDD data.
         We take balanced (stratified) samples from mimic["sequences_train"] and tudd["sequences_train"]

@@ -463,15 +463,14 @@ class Preprocessor:
         #     measurements["measurement_offset"] * 24
         # )
 
-        print(f"measurements1: {measurements.head(40)}")
+        # print(f"measurements1: {measurements.head(40)}")
         measurements = pd.merge(
             measurements,
             mortality_info[["caseid"]],
             on="caseid",
             how="inner",
         )
-        print(f"measurements2: {measurements.head(40)}")
-        # calculate measurement time from admission
+        #        # calculate measurement time from admission
         # assuming measurement offset -0 is at discharge
         measurements["measurement_offset"] = (
             measurements["measurement_offset"].str.replace(",", ".").astype(float)
@@ -504,19 +503,19 @@ class Preprocessor:
         measurements = measurements[
             measurements["measurement_time_from_admission"] > -1
         ]
-        print(f"measurements2: {measurements.head(40)}")
+        # print(f"measurements2: {measurements.head(40)}")
         # a little fuzziness is accaptable a the time borders
         measurements.loc[
             measurements["measurement_time_from_admission"] <= -1,
             "measurement_time_from_admission",
         ] = 0
-        print(f"measurements3: {measurements.head(40)}")
+        # print(f"measurements3: {measurements.head(40)}")
         # filter first 24 h
         measurements = measurements[
             (measurements["measurement_time_from_admission"] >= 0)
             & (measurements["measurement_time_from_admission"] <= 24)
         ]
-        print(f"measurements4: {measurements.head(40)}")
+        # print(f"measurements4: {measurements.head(40)}")
         measurements["measurement_time_from_admission"] = np.floor(
             measurements["measurement_time_from_admission"]
         )
@@ -530,8 +529,8 @@ class Preprocessor:
             .mean()
             .reset_index()
         )
-        print(f"measurements: {measurements.head(40)}")
-        print(f"measurements_agg: {measurements_agg.head(40)}")
+        # print(f"measurements: {measurements.head(40)}")
+        # print(f"measurements_agg: {measurements_agg.head(40)}")
 
         # pivot
         measurements_pivot = measurements_agg.pivot_table(
@@ -539,7 +538,7 @@ class Preprocessor:
             columns="treatmentname",
             values="value",
         ).reset_index()
-        print(f"measurements_pivot: {measurements_pivot.head(40)}")
+        # print(f"measurements_pivot: {measurements_pivot.head(40)}")
 
         # make time grid
         def create_time_grid(mortality_info):
