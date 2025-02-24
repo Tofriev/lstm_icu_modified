@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import random
 from collections import Counter
+import pickle
 
 set_seed(42)
 
@@ -37,16 +38,12 @@ class Preprocessor:
         self.imputation = self.parameters["imputation"]
 
     def print_missing_stats(self, df):
-        # Determine the time column name based on data_type
         time_col = (
             "charttime"
             if self.data_type == "mimic"
             else "measurement_time_from_admission"
         )
-        # Use all columns except 'stay_id' and the time column
         feature_cols = [col for col in df.columns if col in self.ALL_FEATURES]
-
-        # Compute missing counts per row (i.e. per sample)
         missing_per_row = df[feature_cols].isnull().sum(axis=1)
         avg_missing_per_row = missing_per_row.mean()
         avg_missing_per_100 = avg_missing_per_row * 100
@@ -54,16 +51,13 @@ class Preprocessor:
             f"Average missing values per 100 samples (rows): {avg_missing_per_100:.2f}"
         )
 
-        # Compute missingness per sequence (group by stay_id)
         def seq_missing_info(group):
             total_cells = group.shape[0] * len(feature_cols)
             missing_cells = group[feature_cols].isnull().sum().sum()
-            # You can report absolute missing or percentage:
             pct_missing = (missing_cells / total_cells) * 100
             return missing_cells, pct_missing
 
         seq_info = df.groupby("stay_id").apply(seq_missing_info)
-        # Separate the information
         missing_counts = [info[0] for info in seq_info]
         missing_pcts = [info[1] for info in seq_info]
         avg_missing_count_seq = np.mean(missing_counts)
@@ -74,7 +68,6 @@ class Preprocessor:
         print(f"Average missing percentage per sequence: {avg_missing_pct_seq:.2f}%")
 
     def process(self):
-
         if self.data_type == "mimic":
             print("Processing MIMIC data...")
             self.process_mimic()
@@ -83,36 +76,6 @@ class Preprocessor:
             print("Processing TUDD data...")
             self.process_tudd()
             print("Processing TUDD done...")
-
-        # if "tudd" in self.data:
-        #     print("Processing TUDD data...")
-        #     self.process_tudd()
-        #     sequences_dict["tudd"] = self.sequence_dict["tudd"]
-        #     self.feature_index_mapping = {
-        #         index: feature for index, feature in enumerate(self.ALL_FEATURES)
-        #     }
-
-        # if (
-        #     self.parameters.get("fractional_steps")
-        #     and self.parameters["dataset_type"] == "mimic_tudd_fract"
-        # ):
-        #     self.generate_fractions()
-
-        # if self.compare_distributions:
-        #     if (
-        #         "tudd" in self.parameters["dataset_type"]
-        #         and "mimic" in self.parameters["dataset_type"]
-        #     ):
-        #         mimic_df = self.plot_dict["mimic"]
-        #         tudd_df = self.plot_dict["tudd"]
-        #         mimic_imputed_df = self.plot_dict["mimic_imputed"]
-        #         tudd_imputed_df = self.plot_dict["tudd_imputed"]
-        #         print("Distributions before imputation:")
-        #         self.plot_density(mimic_df, tudd_df, self.MIMIC_NUMERICAL_FEATURES)
-        #         print("Distributions after imputation:")
-        #         self.plot_density(
-        #             mimic_imputed_df, tudd_imputed_df, self.MIMIC_NUMERICAL_FEATURES
-        #         )
 
     def process_mimic(self):
         self.variable_conversion_and_aggregation()
@@ -126,17 +89,13 @@ class Preprocessor:
         self.split_train_test_sequences()
 
     def variable_conversion_and_aggregation(self):
-        """
-        converts vars in the static data and aggregate all data on specified time frequency
-        """
         print("aggregating...")
-        if not "aggregated" in self.data_process:
+        if "aggregated" not in self.data_process:
             self.data_process["aggregated"] = {}
         else:
             raise ValueError(
                 "Aggregated data already exists. Exiting to prevent overwriting."
             )
-
         for variable in self.variables.keys():
             if variable == "static_data":
                 static_df = self.data_process["pre_processing"]["static_data"]
@@ -150,8 +109,6 @@ class Preprocessor:
                     {"M": 0, "F": 1}
                 )
                 self.data_process["aggregated"]["static_data"] = static_df
-                # print(self.data_process['aggregated']['static_data'].head(40))
-
             else:
                 df = self.data_process["pre_processing"][variable]
                 df["charttime"] = pd.to_datetime(df["charttime"]).dt.floor(
@@ -162,37 +119,25 @@ class Preprocessor:
                     measurement_cols.tolist()
                 ].mean()
                 self.data_process["aggregated"][variable] = df_agg
-                # print(self.data_process['aggregated'][variable].head(40))
 
     def create_time_grid(self):
-        """
-        This function creates a time grid, afterwards we have a df with two colummns:
-        stay_id and charttime with all the time points for the first 24hs for each stay_id
-        """
         print("creating time grid...")
         static_df = self.data_process["aggregated"]["static_data"]
         df_list = []
         for _, row in static_df.iterrows():
             stay_id = row["stay_id"]
             start_time = row["intime"]
-            end_time = row["first_day_end"] - pd.Timedelta(
-                hours=1
-            )  # correct for 1 hour to have the first 24 hours in total
+            end_time = row["first_day_end"] - pd.Timedelta(hours=1)
             time_range = pd.date_range(
                 start=start_time, end=end_time, freq=self.aggregation_freq
             )
             time_df = pd.DataFrame({"stay_id": stay_id, "charttime": time_range})
             df_list.append(time_df)
         self.time_grid = pd.concat(df_list, ignore_index=True)
-        # print(self.time_grid.head(40))
 
     def merge_on_time_grid(self):
-        """
-        This function merges all datga on the time ghrid
-        """
         print("merging on time grid...")
         merged_df_without_static = self.time_grid.copy()
-        # fist merge all non static data on the time grid
         for variable in self.data_process["aggregated"].keys():
             if variable == "static_data":
                 continue
@@ -203,8 +148,6 @@ class Preprocessor:
                     on=["stay_id", "charttime"],
                     how="left",
                 )
-        print(f"merged shape: {merged_df_without_static.shape}")
-        # now merge the static data except intime and first day end
         static_columns = [
             col
             for col in self.data_process["aggregated"]["static_data"].columns
@@ -218,57 +161,34 @@ class Preprocessor:
         )
         self.data_process["merged"] = merged_df_with_static
 
-        # print(f"merged: {self.data_process['merged'].head(40)}")
-
     def make_feature_lists(self):
-        """
-        Helper function to create lists for numerical, categorical, and sequence variables.
-        """
         static_data = self.variables["static_data"]
         self.SEQUENCE_FEATURES = [
             f"{var}_value" for var in self.variables if var != "static_data"
         ]
-
         self.NUMERICAL_FEATURES = self.SEQUENCE_FEATURES + [
             f"{var}_value"
             for var, attr in static_data.items()
             if attr["type"] == "numerical"
         ]
-
         self.CAT_FEATURES = [
             f"{var}_value"
             for var, attr in static_data.items()
             if attr["type"] == "categorical"
         ]
-
         self.ALL_FEATURES = self.NUMERICAL_FEATURES + self.CAT_FEATURES
 
-        # print(f"Sequence features: {self.SEQUENCE_FEATURES}")
-        # print(f"Numerical features: {self.NUMERICAL_FEATURES}")
-        # print(f"Categorical features: {self.CAT_FEATURES}")
-        # print(f"All features: {self.ALL_FEATURES}")
-
     def impute(self):
-        """
-        impute_with_ffill_bfill:
-            - imputes sequential features with ffill and bfill
-            - imputes remaining missing numerical values with global mean. This is relevant
-                for features that have no value at all and hence ffill and bfill is not applicable
-            - imputes categorical (only gender at the moment) features with mode
-        """
         df = self.data_process["merged"].copy()
-
         if self.imputation["method"] == "ffill_bfill":
             imputed_df = self.impute_with_ffill_bfill(df)
-        # elif self.imputation["method"] == "mean":
-        #     imputed_df = self.impute_with_mean(df)
-        # elif self.imputation["method"] == "rolling_mean":
-        #     imputed_df = self.impute_with_rolling_mean(df)
-        # elif self.imputation["method"] == "knn":
-        #     imputed_df = self.impute_with_knn(df)
-
+        df[self.NUMERICAL_FEATURES] = df[self.NUMERICAL_FEATURES].fillna(
+            df[self.NUMERICAL_FEATURES].mean()
+        )
+        df[self.CAT_FEATURES] = df[self.CAT_FEATURES].fillna(
+            df[self.CAT_FEATURES].mode()
+        )
         self.data_process["imputed"] = imputed_df
-        # print(f"imputed: {self.data_process['imputed'].head(40)}")
 
     def impute_with_ffill_bfill(self, df):
         print("imputing with ffill and bfill...")
@@ -279,95 +199,31 @@ class Preprocessor:
         for num_feature in self.SEQUENCE_FEATURES:
             df[num_feature] = df.groupby("stay_id")[num_feature].ffill()
             df[num_feature] = df.groupby("stay_id")[num_feature].bfill()
-
-        if self.parameters.get("sparsity_check"):
-            self.count_stayid_with_no_observations(df)
-        # impute with global mean
         df[self.NUMERICAL_FEATURES] = df[self.NUMERICAL_FEATURES].fillna(
             df[self.NUMERICAL_FEATURES].mean()
         )
-        # impute with mode
         df[self.CAT_FEATURES] = df[self.CAT_FEATURES].fillna(
             df[self.CAT_FEATURES].mode()
         )
         return df
 
-    # def impute_with_mean(self, X):
-    #     global_means = X[self.NUMERICAL_FEATURES].mean()
-    #     X[self.NUMERICAL_FEATURES] = X[self.NUMERICAL_FEATURES].fillna(global_means)
-    #     for cat_feature in self.CAT_FEATURES:
-    #         X[cat_feature].fillna(X[cat_feature].mode()[0], inplace=True)
-
-    # def impute_with_rolling_mean(self, X):
-    #     X = X.sort_values(["stay_id", "charttime"])
-    #     X[self.NUMERICAL_FEATURES] = X.groupby("stay_id")[
-    #         self.NUMERICAL_FEATURES
-    #     ].apply(
-    #         lambda group: group.fillna(group.rolling(window=3, min_periods=1).mean())
-    #     )
-
-    # def impute_with_knn(self, X):
-    #     print("Starting KNN imputation...")
-
-    #     features_to_impute = self.NUMERICAL_FEATURES  # + self.CAT_FEATURES
-
-    #     knn_imputer = KNNImputer(n_neighbors=self.imputation["n_neighbors"])
-
-    #     X[features_to_impute] = knn_imputer.fit_transform(X[features_to_impute])
-
-    #     for cat_feature in self.CAT_FEATURES:
-    #         X[cat_feature].fillna(X[cat_feature].mode()[0], inplace=True)
-    #     print("KNN imputation done.")
-
-    def count_stayid_with_no_observations(self, df):
-        """
-        counts the number of stay_id's that have no observations at all for a feature
-        """
-        print("checking for stay ids with missing observations for a feature")
-        total_stay_ids = df["stay_id"].nunique()
-        missing_observations = {}
-        features = [col for col in df.columns if col in self.ALL_FEATURES]
-
-        for feature in features:
-            missing_stay_ids = df.groupby("stay_id")[feature].apply(
-                lambda x: x.isna().all()
-            )
-            missing_stay_ids = missing_stay_ids[
-                missing_stay_ids
-            ].index.tolist()  # Get missing stay_id list
-
-            missing_count = len(missing_stay_ids)
-            percentage = (missing_count / total_stay_ids) * 100
-            missing_observations[feature] = (
-                missing_count,
-                percentage,
-                missing_stay_ids,
-            )
-
-        for feature, (count, percentage, stay_ids) in missing_observations.items():
-            print(f"{feature}: {count} stay_id(s) with no observations")
-            print(f"{percentage:.2f}% of total stay_ids")
-            print(f"First 100 missing stay IDs for {feature}: {stay_ids[:100]}\n")
-
     def scale_normalize(self):
         df = self.data_process["imputed"].copy()
-
         if self.parameters["scaling"] == "Standard":
             print("scaling with StandardScaler...")
-            if self.scaler:  # if scaler was given to init, use it
-                print("using preasigned scaler")
+            if self.scaler:
+                print("using preassigned scaler")
             else:
                 self.scaler = StandardScaler()
             df[self.NUMERICAL_FEATURES] = self.scaler.fit_transform(
                 df[self.NUMERICAL_FEATURES]
             )
-
         elif self.parameters["scaling"] == "MinMax":
             print("scaling with MinMaxScaler...")
             if self.scaler:
-                print("using preasigned scaler")
+                print("using preassigned scaler")
             else:
-                scaler = MinMaxScaler(
+                self.scaler = MinMaxScaler(
                     feature_range=(
                         self.parameters["scaling_range"][0],
                         self.parameters["scaling_range"][1],
@@ -376,10 +232,7 @@ class Preprocessor:
             df[self.NUMERICAL_FEATURES] = self.scaler.fit_transform(
                 df[self.NUMERICAL_FEATURES]
             )
-            self.MIMIC_NUMERICAL_FEATURES = self.NUMERICAL_FEATURES
-
         self.data_process["scaled"] = df
-        # print(f'scaled: {self.data_process["scaled"].head(40)}')
 
     def create_sequences(self):
         df = self.data_process["scaled"].copy()
@@ -389,15 +242,6 @@ class Preprocessor:
             features = group[self.ALL_FEATURES].values
             label = group[f'{self.parameters["target"]}_value'].iloc[0]
             sequences.append((features, label))
-
-            # print(
-            #     f"stay_id: {stay_id}, features shape: {features.shape}, label: {label}"
-            # )
-            # print(f"features: {features}")  # Optional: Print the actual feature values
-            # print(f"label: {label}")  # Optional: Print the label value
-            # sequences.append((features, label))
-            # break
-
         self.feature_index_mapping_sequences = {
             index: feature for index, feature in enumerate(self.ALL_FEATURES)
         }
@@ -412,67 +256,18 @@ class Preprocessor:
         )
         self.data_process["sequences_train"] = sequence_dict["train"]
         self.data_process["sequences_test"] = sequence_dict["test"]
-        print(self.data_process["sequences_train"][0])
-
-    #     stay_ids_to_drop = X.groupby('stay_id')[self.NUMERICAL_FEATURES].apply(
-    #         lambda group: group.isnull().all(axis=0).any()
-    #     )
-    #     stay_ids_to_drop = stay_ids_to_drop[stay_ids_to_drop].index
-
-    #     print(f"Number of MIMIC observations before dropping: {len(X)}")
-
-    #     #DROP
-    #    # X = X[~X['stay_id'].isin(stay_ids_to_drop)]
-    #     print(f"Number of MIMIC observations after dropping: {len(X)}")
-    #     # # Use KNN imputation for features without any values
-    #     # features_to_impute = self.NUMERICAL_FEATURES
-    #     # print('starting knn imputation as part of ffill_bfill')
-    #     # knn_imputer = KNNImputer(n_neighbors=4)
-    #     # X[features_to_impute] = knn_imputer.fit_transform(X[features_to_impute])
-    #     # print('knn imputation done')
-    #     # for cat_feature in self.CAT_FEATURES:
-    #     #     X[cat_feature].fillna(X[cat_feature].mode()[0], inplace=True)
-
-    # TODO: put this in a separate class or one of the others
-    def plot_density(self, mimic_df, tudd_df, features):
-
-        for feature in features:
-            plt.figure(figsize=(10, 6))
-            sns.kdeplot(mimic_df[feature].dropna(), label="MIMIC", fill=True, alpha=0.5)
-            sns.kdeplot(tudd_df[feature].dropna(), label="TUDD", fill=True, alpha=0.5)
-            plt.title(f"Density Plot for {feature}")
-            plt.xlabel(feature)
-            plt.ylabel("Density")
-            plt.legend()
-            plt.show()
-            print(f"Mean {feature} MIMIC: {mimic_df[feature].mean()}")
-            print(f"Mean {feature} TUDD: {tudd_df[feature].mean()}")
+        print("Example training sequence:", self.data_process["sequences_train"][0])
 
     def process_tudd(self):
         measurements = self.data_process["pre_processing"]["measurements"].copy()
         print(f"measurements00: {measurements.head(40)}")
         mortality_info = self.data_process["pre_processing"]["mortality_info"].copy()
-
-        # calculate ICU stay duration and measurement offset in hours
-        # reason for adding one to the stay duaration: duiration is that stay_duration in onkly given as full days in real numbers. If stay dration is 0 there might be up to 23 hours of data and so on
         mortality_info = mortality_info[mortality_info["stay_duration"] != 0]
-
-        # mortality_info["stay_duration_hours"] = (mortality_info["stay_duration"]) * 24
-        # in tudd_incomplete.csv the measurement_offset is already in hours
-        # measurements["measurement_offset_hours"] = (
-        #     measurements["measurement_offset"] * 24
-        # )
-
         print(f"measurements1: {measurements.head(40)}")
         measurements = pd.merge(
-            measurements,
-            mortality_info[["caseid"]],
-            on="caseid",
-            how="inner",
+            measurements, mortality_info[["caseid"]], on="caseid", how="inner"
         )
         print(f"measurements2: {measurements.head(40)}")
-        # calculate measurement time from admission
-        # assuming measurement offset -0 is at discharge
         measurements["measurement_offset"] = (
             measurements["measurement_offset"].str.replace(",", ".").astype(float)
         )
@@ -482,36 +277,23 @@ class Preprocessor:
             .str.extract(r"([-+]?\d*\.?\d+)", expand=False)
             .astype(float)
         )
-
-        # measurements["measurement_time_from_admission"] = measurements[
-        #     "measurement_offset"
-        # ].abs()
         measurements["min_offset"] = measurements.groupby("caseid")[
             "measurement_offset"
         ].transform("min")
         measurements["measurement_time_from_admission"] = (
             measurements["measurement_offset"] - measurements["min_offset"]
         )
-
-        # measurements["measurement_offset"] = pd.to_numeric(
-        #     measurements["measurement_offset"], errors="coerce"
-        # )
-
         measurements.rename(columns={"caseid": "stay_id"}, inplace=True)
         mortality_info.rename(columns={"caseid": "stay_id"}, inplace=True)
-
-        # clean negative vals
         measurements = measurements[
             measurements["measurement_time_from_admission"] > -1
         ]
         print(f"measurements2: {measurements.head(40)}")
-        # a little fuzziness is accaptable a the time borders
         measurements.loc[
             measurements["measurement_time_from_admission"] <= -1,
             "measurement_time_from_admission",
         ] = 0
         print(f"measurements3: {measurements.head(40)}")
-        # filter first 24 h
         measurements = measurements[
             (measurements["measurement_time_from_admission"] >= 0)
             & (measurements["measurement_time_from_admission"] <= 24)
@@ -520,8 +302,6 @@ class Preprocessor:
         measurements["measurement_time_from_admission"] = np.floor(
             measurements["measurement_time_from_admission"]
         )
-
-        # aggregate
         measurements["value"] = pd.to_numeric(measurements["value"], errors="coerce")
         measurements_agg = (
             measurements.groupby(
@@ -532,8 +312,6 @@ class Preprocessor:
         )
         print(f"measurements: {measurements.head(40)}")
         print(f"measurements_agg: {measurements_agg.head(40)}")
-
-        # pivot
         measurements_pivot = measurements_agg.pivot_table(
             index=["stay_id", "measurement_time_from_admission"],
             columns="treatmentname",
@@ -541,12 +319,11 @@ class Preprocessor:
         ).reset_index()
         print(f"measurements_pivot: {measurements_pivot.head(40)}")
 
-        # make time grid
         def create_time_grid(mortality_info):
             df_list = []
             for _, row in mortality_info.iterrows():
                 stay_id = row["stay_id"]
-                time_range = np.arange(0, 24)  # 24 hour grid
+                time_range = np.arange(0, 24)
                 time_df = pd.DataFrame(
                     {"stay_id": stay_id, "measurement_time_from_admission": time_range}
                 )
@@ -555,8 +332,6 @@ class Preprocessor:
 
         time_grid = create_time_grid(mortality_info)
         time_grid.to_csv("time_grid.csv", index=False)
-
-        # merge on time grid
         merged_df = pd.merge(
             time_grid,
             measurements_pivot,
@@ -580,12 +355,8 @@ class Preprocessor:
         )
         print("TUDD missing values statistics:")
         self.print_missing_stats(merged_df)
-
-        # print unique treatment names before mapping
         print("Unique treatment names before mapping:")
         print(merged_df.columns.unique())
-
-        # rename
         treatmentnames_mapping = {
             "HF": "hr_value",
             "AGAP": "anion_gap_value",
@@ -603,15 +374,11 @@ class Preprocessor:
             "bodyheight": "height_value",
         }
         merged_df.rename(columns=treatmentnames_mapping, inplace=True)
-
-        # print unique treatment names after mapping
         print("Unique treatment names after mapping:")
         print(merged_df.columns.unique())
-
         print(
             f'number of unique stay_ids before renaming and bounding: {merged_df["stay_id"].nunique()}'
         )
-        # bounds
         bounds = {
             "age": (18, 90),
             "weight_value": (20, 500),
@@ -629,63 +396,37 @@ class Preprocessor:
             "creatinine_value": (0.1, 20),
         }
         print(
-            f'number of unique stay_ids after bounding: {merged_df["stay_id"].nunique()}'
+            f'number of unique stay_ids before bounding: {merged_df["stay_id"].nunique()}'
         )
-        # if self.parameters['small_data']:
-        #     fraction = 0.1
-        #     patient_sample = merged_df[['stay_id', 'exitus']].drop_duplicates().groupby('exitus', group_keys=False).apply(
-        #         lambda x: x.sample(frac=fraction, random_state=42)
-        #     )
-        #     sampled_df = merged_df[merged_df['stay_id'].isin(patient_sample['stay_id'])]
-        #     merged_df = sampled_df
-
-        # mean before conversion
         print("Mean before conversion:")
         print(f"Glucose (mmol/L): {merged_df['glc_value'].mean()}")
         print(f"Creatinine (micro_mol/L): {merged_df['creatinine_value'].mean()}")
         print(f"INR (Quick): {merged_df['inr_value'].mean()}")
         print(f"Lactate (mmol/L): {merged_df['lactate_value'].mean()}")
-
-        # convert units
-        # glucose mmol/L to mg/dL
         merged_df["glc_value"] = merged_df["glc_value"] * 18.0182
         print(f"Glucose conversion done: {merged_df['glc_value'].mean()} mg/dL")
-
-        # creatinine micro_mol/L to mg/dL
         merged_df["creatinine_value"] = merged_df["creatinine_value"] * 0.0113
         print(
             f"Creatinine conversion done: {merged_df['creatinine_value'].mean()} mg/dL"
         )
-
-        # convert quick to inr
         merged_df["inr_value"] = merged_df["inr_value"] / 100
         print(f"INR conversion done: {merged_df['inr_value'].mean()}")
-
-        # convert lactate mmol/L to mg/dL
-        # merged_df['lactate_value'] = merged_df['lactate_value'] * 9.01
-        # print(f"Lactate conversion done: {merged_df['lactate_value'].mean()} mg/dL")
         print(
             f'number of unique stay_ids before filtering: {merged_df["stay_id"].nunique()}'
         )
-        # filter age
         merged_df = merged_df[merged_df["age_value"] >= 18]
         merged_df["age_value"] = merged_df["age_value"].apply(lambda x: min(x, 90))
-
         for feature, (lower, upper) in bounds.items():
             if feature in merged_df.columns:
                 merged_df[feature] = pd.to_numeric(merged_df[feature], errors="coerce")
                 merged_df.loc[merged_df[feature] < lower, feature] = np.nan
                 merged_df.loc[merged_df[feature] > upper, feature] = np.nan
-
         print(
             f'number of unique stay_ids before iumputing: {merged_df["stay_id"].nunique()}'
         )
-
-        # imputation
         if self.imputation["method"] == "ffill_bfill":
             merged_df = self.impute_with_ffill_bfill(merged_df)
         merged_df["exitus"].fillna(0, inplace=True)
-
         if self.parameters["scaling"] == "Standard":
             print("scaling....")
             if hasattr(self, "scaler") and self.scaler is not None:
@@ -696,7 +437,6 @@ class Preprocessor:
             else:
                 print("using tudd scaler")
                 scaler = StandardScaler()
-                print(f"scaling:{self.NUMERICAL_FEATURES}")
                 merged_df[self.NUMERICAL_FEATURES] = scaler.fit_transform(
                     merged_df[self.NUMERICAL_FEATURES]
                 )
@@ -709,15 +449,9 @@ class Preprocessor:
             features = group[self.ALL_FEATURES].values
             label = group["exitus"].iloc[0]
             sequences.append((features, label))
-
         self.feature_index_mapping_sequences = {
             index: feature for index, feature in enumerate(self.ALL_FEATURES)
         }
-
-        # self.data_process["sequences_test"] = sequences
-        # self.data_process["sequences_train"] = []
-
-        # split train test
         labels = [seq[1] for seq in sequences]
         print(f"Number of 1s in labels: {labels.count(1)}")
         self.data_process["sequences_train"], self.data_process["sequences_test"] = (
@@ -728,3 +462,29 @@ class Preprocessor:
                 random_state=42,
             )
         )
+
+    # NEW: Save sequences to disk for streaming
+    def save_sequences_to_disk(self, train_file: str, test_file: str):
+        # Save training sequences record-by-record.
+        with open(train_file, "wb") as f_train:
+            for seq in self.data_process["sequences_train"]:
+                pickle.dump(seq, f_train)
+        print(f"Training sequences saved to {train_file}")
+        # Save test sequences record-by-record.
+        with open(test_file, "wb") as f_test:
+            for seq in self.data_process["sequences_test"]:
+                pickle.dump(seq, f_test)
+        print(f"Test sequences saved to {test_file}")
+
+    def plot_density(self, mimic_df, tudd_df, features):
+        for feature in features:
+            plt.figure(figsize=(10, 6))
+            sns.kdeplot(mimic_df[feature].dropna(), label="MIMIC", fill=True, alpha=0.5)
+            sns.kdeplot(tudd_df[feature].dropna(), label="TUDD", fill=True, alpha=0.5)
+            plt.title(f"Density Plot for {feature}")
+            plt.xlabel(feature)
+            plt.ylabel("Density")
+            plt.legend()
+            plt.show()
+            print(f"Mean {feature} MIMIC: {mimic_df[feature].mean()}")
+            print(f"Mean {feature} TUDD: {tudd_df[feature].mean()}")

@@ -2,6 +2,9 @@ from torch.utils.data import DataLoader, WeightedRandomSampler
 import pytorch_lightning as pl
 import numpy as np
 import torch
+from torch.utils.data import IterableDataset
+import pandas as pd
+import pickle
 
 
 ###########################################
@@ -24,6 +27,51 @@ class IcuDataset(torch.utils.data.Dataset):
             sequence=torch.tensor(sequence, dtype=torch.float32),
             label=torch.tensor(label).long(),
         )
+
+
+class StreamedSequenceDataset(IterableDataset):
+    def __init__(self, file_path):
+        super().__init__()
+        self.file_path = file_path
+
+    def __iter__(self):
+        with open(self.file_path, "rb") as f:
+            while True:
+                try:
+                    sequence, label = pickle.load(f)
+                    seq_tensor = torch.tensor(sequence, dtype=torch.float32)
+                    label_tensor = torch.tensor(label, dtype=torch.long)
+                    yield {"sequence": seq_tensor, "label": label_tensor}
+                except EOFError:
+                    break
+
+
+class HybridDataModule(pl.LightningDataModule):
+    """
+    Streams train_data from disk, but uses an in-memory dataset for test_data.
+    """
+
+    def __init__(self, train_file, test_sequences, batch_size):
+        super().__init__()
+        self.train_file = train_file
+        self.test_sequences = test_sequences
+        self.batch_size = batch_size
+
+    def setup(self, stage=None):
+        # stzream train
+        self.train_dataset = StreamedSequenceDataset(self.train_file)
+
+        # memory test
+        self.test_dataset = IcuDataset(self.test_sequences)
+
+    def train_dataloader(self):
+        return DataLoader(self.train_dataset, batch_size=self.batch_size, num_workers=0)
+
+    def val_dataloader(self):
+        return DataLoader(self.test_dataset, batch_size=self.batch_size)
+
+    def test_dataloader(self):
+        return DataLoader(self.test_dataset, batch_size=self.batch_size)
 
 
 class IcuDataModule(pl.LightningDataModule):

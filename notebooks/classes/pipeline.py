@@ -13,6 +13,7 @@ from copy import deepcopy
 import random
 import gc
 import torch
+from classes.data_module import HybridDataModule
 
 
 class Pipeline(object):
@@ -87,7 +88,7 @@ class Pipeline(object):
                 "No fractional indices found. Make sure 'fract' is in your dataset_type."
             )
 
-        # always test on TUDD test
+        # Always test on TUDD test
         test_data = self.DataManager.data["tudd"]["sequences_test"]
         tudd_all = self.DataManager.data["tudd_train_all"]
 
@@ -96,8 +97,6 @@ class Pipeline(object):
             mimic_all = self.DataManager.data["mimic_train_all"]
 
         self.fraction_results = {}
-        # self.fraction_models = {}
-
         fractional_indices = self.DataManager.data["fractional_indices"]
 
         for fraction_size in sorted(fractional_indices.keys()):
@@ -105,7 +104,7 @@ class Pipeline(object):
                 f"\nTraining with fraction_size = {fraction_size} training samples..."
             )
 
-            # build tudd from indices
+            # build fraction from tudd
             idx_list = fractional_indices[fraction_size]
             fraction_data = [tudd_all[i] for i in idx_list]
 
@@ -115,12 +114,43 @@ class Pipeline(object):
 
             print(f"Length of fraction_data: {len(fraction_data)}")
 
+            # ---------------------------------------------------------------------
+            # (A) Write the fraction_data to disk so we don't hold it all in memory
+            # For example:
+            fraction_dir = "data/fractional"
+            os.makedirs(fraction_dir, exist_ok=True)
+
+            # Store the file in this directory
+            fraction_file = os.path.join(
+                fraction_dir, f"fraction_data_{fraction_size}.pkl"
+            )
+            write_sequences_to_file(fraction_data, fraction_file)
+            # ---------------------------------------------------------------------
+
             local_trainer = Trainer(self.parameters)
-            result, model = local_trainer.train(fraction_data, test_data)
+
+            # ---------------------------------------------------------------------
+            # (B) Build a HybridDataModule with the fraction_data on disk,
+            #     but normal in-memory test_data
+
+            batch_size = self.parameters["model_parameters"][
+                self.parameters["models"][0]
+            ]["batch_size"]
+            data_module = HybridDataModule(
+                train_file=fraction_file,
+                test_sequences=test_data,
+                batch_size=batch_size,
+            )
+
+            # (C) Train using local_trainer.train_with_datamodule(...) or similar
+            # or if your Trainer class expects train/test sequences directly,
+            # you might adapt it to accept a DataModule. For example:
+            result, model = local_trainer.train_with_datamodule(data_module)
+            # ---------------------------------------------------------------------
 
             self.fraction_results[fraction_size] = deepcopy(result)
-            # self.fraction_models[fraction_size] = deepcopy(model)
 
+            # cleanup
             del fraction_data
             gc.collect()
             if torch.cuda.is_available():
@@ -247,3 +277,9 @@ class Pipeline(object):
                 plt.ylabel("Density")
                 plt.legend()
                 plt.show()
+
+
+def write_sequences_to_file(sequence_list, file_path):
+    with open(file_path, "wb") as f:
+        for seq in sequence_list:
+            pickle.dump(seq, f)  # seq is (features, label)

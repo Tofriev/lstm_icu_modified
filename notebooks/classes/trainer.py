@@ -104,3 +104,35 @@ class Trainer:
                 print(classification_report(true_labels, predictions))
         print(self.results)
         return self.results, self.trained_models
+
+    def train_with_datamodule(self, data_module):
+        """
+        Exactly like train(), but uses data_module for fit/test.
+        """
+        logger = TensorBoardLogger("lightning_logs", name=self.parameters["models"][0])
+        accelerator = "mps" if torch.backends.mps.is_available() else "cpu"
+
+        pl_trainer = pl.Trainer(
+            logger=logger,
+            enable_checkpointing=False,
+            max_epochs=self.parameters["model_parameters"][
+                self.parameters["models"][0]
+            ]["n_epochs"],
+            accelerator=accelerator,
+            devices=1,
+            gradient_clip_val=self.parameters["model_parameters"][
+                self.parameters["models"][0]
+            ]["gradient_clip_val"],
+        )
+
+        ModelClass = get_model_class(self.parameters["models"][0])
+        model = ModelClass(
+            n_features=self.parameters["n_features"],
+            **self.parameters["model_parameters"][self.parameters["models"][0]],
+        )
+
+        pl_trainer.fit(model, data_module)
+        result = pl_trainer.test(model, data_module)
+        self.trained_models[self.parameters["models"][0]] = model
+        self.results[self.parameters["models"][0]] = result
+        return self.results, model
