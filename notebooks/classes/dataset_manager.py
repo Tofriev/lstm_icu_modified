@@ -21,12 +21,16 @@ class DatasetManager:
         self.tudd_datapath = os.path.join(project_root, "data/raw/tudd/")
         self.variables = variables
         self.dataset_type = parameters["dataset_type"]
+        if isinstance(self.dataset_type, list):
+            self.dataset_type = self.dataset_type[0]
+
         self.parameters = parameters
         self.data = {}
         random.seed(42)
 
     def load_data(self):
         if "mimic" in self.dataset_type or "combined" in self.dataset_type:
+            print("Loading MIMIC data...")
             self.data["mimic"] = {}
             self.load_mimic()
             if self.parameters.get("small_data", False):
@@ -37,6 +41,7 @@ class DatasetManager:
             )
 
         if "tudd" in self.dataset_type or "combined" in self.dataset_type:
+            print("Loading TUDD data...")
             self.data["tudd"] = {}
             self.load_tudd()
             self.preprocess("tudd")
@@ -46,8 +51,12 @@ class DatasetManager:
             )
 
         if "combined" in self.dataset_type:
-            # self.create_combined_splits_50_50()
-            self.create_combined_splits_full()
+            print("Creating combined splits...")
+            self.create_combined_splits_50_50()
+            # self.create_combined_splits_full()
+        if "fract" in self.dataset_type:
+            print("Creating fractional splits...")
+            self.generate_fractions()
 
     def create_combined_splits_full(self):
         """
@@ -103,7 +112,7 @@ class DatasetManager:
 
         # Determine the maximum number we can take from each so that both sides contribute equally.
         n_train = min(len(mimic_train), len(tudd_train))
-        print(f"n_train: {n_train}")
+        print(f"n_train from each: {n_train}")
         mimic_train_sample = self.stratified_sample(mimic_train, n_train)
         tudd_train_sample = self.stratified_sample(tudd_train, n_train)
         combined_train = mimic_train_sample + tudd_train_sample
@@ -131,16 +140,47 @@ class DatasetManager:
         )
 
     def stratified_sample(self, sequences, sample_count):
-        # If sample_count is the entire dataset length, just return everything.
         if sample_count == len(sequences):
             return sequences
 
         labels = [seq[1] for seq in sequences]
-        # Otherwise, do the usual stratified sampling on a subset
-        _, sample, _, _ = train_test_split(
+        sample, _, _, _ = train_test_split(
             sequences, labels, train_size=sample_count, stratify=labels, random_state=42
         )
         return sample
+
+    def generate_fractions(self):
+        if "mimic_tudd_fract" in self.dataset_type:
+            train_data_full = (
+                self.data["mimic"]["sequences_train"]
+                + self.data["mimic"]["sequences_test"]
+            )
+            random.shuffle(train_data_full)
+            train_data_for_fractions = self.data["tudd"]["sequences_train"]
+        elif "tudd_fract" in self.dataset_type:
+            train_data_for_fractions = self.data["tudd"]["sequences_train"]
+            random.shuffle(train_data_for_fractions)
+            self.data["train_fractions"] = train_data_for_fractions
+        elif "mimic_fract" in self.dataset_type:
+            train_data_for_fractions = self.data["mimic"]["sequences_train"]
+            random.shuffle(train_data_for_fractions)
+            self.data["train_fractions"] = train_data_for_fractions
+
+        if "mimic_tudd_fract" in self.dataset_type:
+            self.data["mimic_train_all"] = train_data_full
+
+        n_train = len(train_data_for_fractions)
+        step_size = self.parameters["fractional_steps"]
+
+        fractional_indices = {}
+        n_sampled = 0
+
+        while n_sampled + step_size < n_train:
+            n_sampled += step_size
+            # store the indexes only to avoid memory issues
+            fractional_indices[n_sampled] = list(range(n_sampled))
+
+        self.data["fractional_indices"] = fractional_indices
 
     def preprocess(self, data_type: str):
         sequences_dict = {}

@@ -1,92 +1,30 @@
 {
-    "mimic_combined": {
-        "result_dict": {
-            "lstm": [
-                {
-                    "test_loss": 0.7408955693244934,
-                    "test_auroc": 0.8206191658973694
-                }
-            ]
-        }
+    "8000": {
+        "lstm": [
+            {
+                "test_loss": 0.8184388279914856,
+                "test_auroc": 0.8204749822616577
+            }
+        ],
+        "multi_channel_lstm": [
+            {
+                "test_loss": 0.8233572840690613,
+                "test_auroc": 0.8261720538139343
+            }
+        ]
     },
-    "tudd_combined": {
-        "result_dict": {
-            "lstm": [
-                {
-                    "test_loss": 1.0430084466934204,
-                    "test_auroc": 0.7888895869255066
-                }
-            ]
-        }
-    },
-    "combined_combined": {
-        "result_dict": {
-            "lstm": [
-                {
-                    "test_loss": 0.7778992652893066,
-                    "test_auroc": 0.8661203384399414
-                }
-            ]
-        }
-    },
-    "combined_mimic": {
-        "result_dict": {
-            "lstm": [
-                {
-                    "test_loss": 0.7345932126045227,
-                    "test_auroc": 0.8656111359596252
-                }
-            ]
-        }
-    },
-    "combined_tudd": {
-        "result_dict": {
-            "lstm": [
-                {
-                    "test_loss": 0.8159984350204468,
-                    "test_auroc": 0.8603221774101257
-                }
-            ]
-        }
-    },
-    "tudd_tudd": {
-        "result_dict": {
-            "lstm": [
-                {
-                    "test_loss": 0.7783842086791992,
-                    "test_auroc": 0.8661699891090393
-                }
-            ]
-        }
-    },
-    "mimic_mimic": {
-        "result_dict": {
-            "lstm": [
-                {
-                    "test_loss": 0.7906324863433838,
-                    "test_auroc": 0.8627780079841614
-                }
-            ]
-        }
-    },
-    "mimic_tudd": {
-        "result_dict": {
-            "lstm": [
-                {
-                    "test_loss": 0.5219686627388,
-                    "test_auroc": 0.7476661205291748
-                }
-            ]
-        }
-    },
-    "tudd_mimic": {
-        "result_dict": {
-            "lstm": [
-                {
-                    "test_loss": 1.1397225856781006,
-                    "test_auroc": 0.7611303329467773
-                }
-            ]
-        }
+    "16000": {
+        "lstm": [
+            {
+                "test_loss": 0.8782886266708374,
+                "test_auroc": 0.8541268706321716
+            }
+        ],
+        "multi_channel_lstm": [
+            {
+                "test_loss": 0.8488077521324158,
+                "test_auroc": 0.8390379548072815
+            }
+        ]
     }
 }

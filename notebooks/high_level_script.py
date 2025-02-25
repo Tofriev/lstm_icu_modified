@@ -66,23 +66,28 @@ parameters = {
     # "dataset_type": "tudd_mimic",
     # "dataset_type": "mimic_tudd",
     "dataset_type": [
-        "mimic_combined",
-        "tudd_combined",
-        "combined_combined",
-        "combined_mimic",
-        "combined_tudd",
-        "tudd_tudd",
-        "mimic_mimic",
-        "mimic_tudd",
-        "tudd_mimic",
+        # "mimic_combined",
+        # "tudd_combined",
+        # "combined_combined",
+        # "combined_mimic",
+        # "combined_tudd",
+        #     "tudd_tudd",
+        #     "mimic_mimic",
+        #     "mimic_tudd",
+        #     "tudd_mimic",
     ],
     # ,
     # "dataset_type": "combined_combined",
     # "dataset_type": "combined_mimic",
     # "dataset_type": "combined_tudd",
-    # "dataset_type": "tudd_fract",
+    "dataset_type": [  # fract only works in single run and with new_data = true
+        # "tudd_fract",
+        "mimic_fract",
+        # "mimic_tudd_fract",
+    ],
+    "shuffle_mimic_tudd_fract": False,
     "fractional_steps": 1000,  # example for mimic_tudd: adds 1000 samples from tudd train to the training set of mimic for every fraction. maybe try with 200.
-    "small_data": True,  # not implemented for tudd yet
+    "small_data": False,  # not implemented for tudd yet
     "aggregation_frequency": "H",
     "imputation": {
         "method": "ffill_bfill"
@@ -94,7 +99,7 @@ parameters = {
     # "models": ["lstm"],
     "models": [
         "lstm",
-        # "multi_channel_lstm",
+        "multi_channel_lstm",
     ],
     # "models": ["multi_channel_lstm"],
     # "models": ["cnn_lstm"],
@@ -113,7 +118,7 @@ parameters = {
             "weight_decay": 1e-5,
             "class_weights": [1.0, 3.0],
             "batch_size": 128,
-            "n_epochs": 5,  # 5
+            "n_epochs": 1,  # 5
             "gradient_clip_val": 1,
         },
         # "multi_channel_lstm": {
@@ -139,7 +144,7 @@ parameters = {
             "weight_decay": 1e-5,
             "class_weights": [1.0, 3.0],
             "batch_size": 128,
-            "n_epochs": 6,  # 6
+            "n_epochs": 1,  # 6
             "gradient_clip_val": 1,
         },
         "cnn_lstm": {
@@ -178,19 +183,19 @@ parameters = {
 
 if isinstance(parameters["dataset_type"], list) and len(parameters["dataset_type"]) > 1:
     ############################# Mutli Run ##################################################
+    print("Multi Run")
     multi_pipe = MultiDatasetPipeline(
         variables=variables,
         parameters=parameters,
         dataset_types=parameters["dataset_type"],
-        new_data=False,
+        new_data=True,
     )
     results = multi_pipe.run_all(model_list=parameters["models"])
 else:
     ############################# Single Run #################################################
-    pipe = Pipeline(variables=variables, parameters=parameters, new_data=False)
-    pipe.prepare_data()
-    # pipe.visualize_sequences()
-    pipe.train()
+    print("Single Run")
+    pipe = Pipeline(variables=variables, parameters=parameters, new_data=True)
+    pipe.run_experiment()
     # pipe.memorize()
     # pipe.explain(model_name="lstm", method="heatmap_shap", num_samples=10000)
     # pipe.explain(model_name="lstm", method="plot_single_feature_time_shap", num_samples=100)
