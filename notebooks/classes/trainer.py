@@ -47,12 +47,19 @@ class Trainer:
             # )
             logger = TensorBoardLogger("lightning_logs", name=model_name)
 
+            if torch.backends.mps.is_available():
+                accelerator = "mps"
+            elif torch.cuda.is_available():
+                accelerator = "cuda"
+            else:
+                accelerator = "cpu"
+
             pl_trainer = pl.Trainer(
                 logger=logger,
                 enable_checkpointing=False,
                 # callbacks=[checkpoint_callback],
                 max_epochs=n_epochs,
-                accelerator="mps" if torch.backends.mps.is_available() else "cpu",
+                accelerator=accelerator,
                 devices=1,
                 gradient_clip_val=model_config["gradient_clip_val"],
             )
