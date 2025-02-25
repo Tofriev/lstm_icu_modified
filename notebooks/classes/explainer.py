@@ -338,10 +338,11 @@ class SHAPExplainer:
             self.plot_shap_heatmap_feature_rank(feature_names)
         elif method == "plot_single_feature_time_shap":
             self.plot_single_feature_time_shap(
-                sample_idx=1, feature_idx=-1, scaler=scaler, feature_name="mge_value"
+                sample_idx=1, feature_idx=-1, scaler=scaler, feature_name="age_value"
             )
         else:
             raise ValueError(f"Unknown method: {method}")
+        # ['mbp_value', 'gcs_total_value', 'glc_value', 'creatinine_value', 'potassium_value', 'hr_value', 'wbc_value', 'platelets_value', 'inr_value', 'anion_gap_value', 'lactate_value', 'temperature_value', 'weight_value', 'age_value', 'gender_value']
 
 
 class LogitWrapper(torch.nn.Module):

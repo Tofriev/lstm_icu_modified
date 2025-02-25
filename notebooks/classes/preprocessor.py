@@ -119,7 +119,7 @@ class Preprocessor:
         self.create_time_grid()
         self.merge_on_time_grid()
         print("MIMIC missing values statistics:")
-        self.print_missing_stats(self.data_process["merged"])
+        # self.print_missing_stats(self.data_process["merged"])
         self.impute()
         self.scale_normalize()
         self.create_sequences()
@@ -203,7 +203,7 @@ class Preprocessor:
                     on=["stay_id", "charttime"],
                     how="left",
                 )
-        print(f"merged shape: {merged_df_without_static.shape}")
+        # print(f"merged shape: {merged_df_without_static.shape}")
         # now merge the static data except intime and first day end
         static_columns = [
             col
@@ -478,7 +478,7 @@ class Preprocessor:
 
     def process_tudd(self):
         measurements = self.data_process["pre_processing"]["measurements"].copy()
-        print(f"measurements00: {measurements.head(40)}")
+        # print(f"measurements00: {measurements.head(40)}")
         mortality_info = self.data_process["pre_processing"]["mortality_info"].copy()
 
         # calculate ICU stay duration and measurement offset in hours
@@ -491,14 +491,14 @@ class Preprocessor:
         #     measurements["measurement_offset"] * 24
         # )
 
-        print(f"measurements1: {measurements.head(40)}")
+        # print(f"measurements1: {measurements.head(40)}")
         measurements = pd.merge(
             measurements,
             mortality_info[["caseid"]],
             on="caseid",
             how="inner",
         )
-        print(f"measurements2: {measurements.head(40)}")
+        # print(f"measurements2: {measurements.head(40)}")
         # calculate measurement time from admission
         # assuming measurement offset -0 is at discharge
         measurements["measurement_offset"] = (
@@ -532,19 +532,19 @@ class Preprocessor:
         measurements = measurements[
             measurements["measurement_time_from_admission"] > -1
         ]
-        print(f"measurements2: {measurements.head(40)}")
+        # print(f"measurements2: {measurements.head(40)}")
         # a little fuzziness is accaptable a the time borders
         measurements.loc[
             measurements["measurement_time_from_admission"] <= -1,
             "measurement_time_from_admission",
         ] = 0
-        print(f"measurements3: {measurements.head(40)}")
+        # print(f"measurements3: {measurements.head(40)}")
         # filter first 24 h
         measurements = measurements[
             (measurements["measurement_time_from_admission"] >= 0)
             & (measurements["measurement_time_from_admission"] <= 24)
         ]
-        print(f"measurements4: {measurements.head(40)}")
+        # print(f"measurements4: {measurements.head(40)}")
         measurements["measurement_time_from_admission"] = np.floor(
             measurements["measurement_time_from_admission"]
         )
@@ -558,8 +558,8 @@ class Preprocessor:
             .mean()
             .reset_index()
         )
-        print(f"measurements: {measurements.head(40)}")
-        print(f"measurements_agg: {measurements_agg.head(40)}")
+        # print(f"measurements: {measurements.head(40)}")
+        # print(f"measurements_agg: {measurements_agg.head(40)}")
 
         # pivot
         measurements_pivot = measurements_agg.pivot_table(
@@ -567,7 +567,7 @@ class Preprocessor:
             columns="treatmentname",
             values="value",
         ).reset_index()
-        print(f"measurements_pivot: {measurements_pivot.head(40)}")
+        # (f"measurements_pivot: {measurements_pivot.head(40)}")
 
         # make time grid
         def create_time_grid(mortality_info):
@@ -668,33 +668,33 @@ class Preprocessor:
         #     merged_df = sampled_df
 
         # mean before conversion
-        print("Mean before conversion:")
-        print(f"Glucose (mmol/L): {merged_df['glc_value'].mean()}")
-        print(f"Creatinine (micro_mol/L): {merged_df['creatinine_value'].mean()}")
-        print(f"INR (Quick): {merged_df['inr_value'].mean()}")
-        print(f"Lactate (mmol/L): {merged_df['lactate_value'].mean()}")
+        # print("Mean before conversion:")
+        # print(f"Glucose (mmol/L): {merged_df['glc_value'].mean()}")
+        # print(f"Creatinine (micro_mol/L): {merged_df['creatinine_value'].mean()}")
+        # print(f"INR (Quick): {merged_df['inr_value'].mean()}")
+        # print(f"Lactate (mmol/L): {merged_df['lactate_value'].mean()}")
 
         # convert units
         # glucose mmol/L to mg/dL
         merged_df["glc_value"] = merged_df["glc_value"] * 18.0182
-        print(f"Glucose conversion done: {merged_df['glc_value'].mean()} mg/dL")
+        # print(f"Glucose conversion done: {merged_df['glc_value'].mean()} mg/dL")
 
         # creatinine micro_mol/L to mg/dL
         merged_df["creatinine_value"] = merged_df["creatinine_value"] * 0.0113
-        print(
-            f"Creatinine conversion done: {merged_df['creatinine_value'].mean()} mg/dL"
-        )
+        # print(
+        #     f"Creatinine conversion done: {merged_df['creatinine_value'].mean()} mg/dL"
+        # )
 
         # convert quick to inr
         merged_df["inr_value"] = merged_df["inr_value"] / 100
-        print(f"INR conversion done: {merged_df['inr_value'].mean()}")
+        # print(f"INR conversion done: {merged_df['inr_value'].mean()}")
 
         # convert lactate mmol/L to mg/dL
         # merged_df['lactate_value'] = merged_df['lactate_value'] * 9.01
         # print(f"Lactate conversion done: {merged_df['lactate_value'].mean()} mg/dL")
-        print(
-            f'number of unique stay_ids before filtering: {merged_df["stay_id"].nunique()}'
-        )
+        # print(
+        #     f'number of unique stay_ids before filtering: {merged_df["stay_id"].nunique()}'
+        # )
         # filter age
         merged_df = merged_df[merged_df["age_value"] >= 18]
         merged_df["age_value"] = merged_df["age_value"].apply(lambda x: min(x, 90))
@@ -705,9 +705,9 @@ class Preprocessor:
                 merged_df.loc[merged_df[feature] < lower, feature] = np.nan
                 merged_df.loc[merged_df[feature] > upper, feature] = np.nan
 
-        print(
-            f'number of unique stay_ids before iumputing: {merged_df["stay_id"].nunique()}'
-        )
+        # print(
+        #     f'number of unique stay_ids before iumputing: {merged_df["stay_id"].nunique()}'
+        # )
 
         # imputation
         if self.imputation["method"] == "ffill_bfill":
@@ -724,14 +724,14 @@ class Preprocessor:
             else:
                 print("using tudd scaler")
                 scaler = StandardScaler()
-                print(f"scaling:{self.NUMERICAL_FEATURES}")
+                # print(f"scaling:{self.NUMERICAL_FEATURES}")
                 merged_df[self.NUMERICAL_FEATURES] = scaler.fit_transform(
                     merged_df[self.NUMERICAL_FEATURES]
                 )
-        print(f"exitus: {merged_df.head(40)}")
+        # print(f"exitus: {merged_df.head(40)}")
         unique_stays = merged_df.groupby("stay_id").first()
         exitus_count = unique_stays[unique_stays["exitus"] == 1].shape[0]
-        print(f"Count of exitus == 1: {exitus_count}")
+        # print(f"Count of exitus == 1: {exitus_count}")
         sequences = []
         for stay_id, group in merged_df.groupby("stay_id"):
             features = group[self.ALL_FEATURES].values
@@ -747,7 +747,7 @@ class Preprocessor:
 
         # split train test
         labels = [seq[1] for seq in sequences]
-        print(f"Number of 1s in labels: {labels.count(1)}")
+        # print(f"Number of 1s in labels: {labels.count(1)}")
         self.data_process["sequences_train"], self.data_process["sequences_test"] = (
             train_test_split(
                 sequences,

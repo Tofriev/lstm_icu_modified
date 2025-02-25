@@ -7,7 +7,7 @@ from utils import set_seed
 import random
 
 set_seed(42)
-
+random.seed(42)
 
 project_root = os.path.abspath(os.path.join(os.getcwd(), ".."))
 sys.path.append(project_root)
@@ -23,6 +23,7 @@ class DatasetManager:
         self.dataset_type = parameters["dataset_type"]
         self.parameters = parameters
         self.data = {}
+        random.seed(42)
 
     def load_data(self):
         if "mimic" in self.dataset_type or "combined" in self.dataset_type:
@@ -45,9 +46,48 @@ class DatasetManager:
             )
 
         if "combined" in self.dataset_type:
-            self.create_combined_splits()
+            # self.create_combined_splits_50_50()
+            self.create_combined_splits_full()
 
-    def create_combined_splits(self):
+    def create_combined_splits_full(self):
+        """
+        Creates full combined training and test splits from the full MIMIC and TUDD datasets.
+        Instead of taking balanced samples, this function concatenates all available training
+        and test sequences from MIMIC and TUDD.
+        """
+
+        # --- Create full combined training set ---
+        mimic_train = self.data["mimic"].get("sequences_train")
+        tudd_train = self.data["tudd"].get("sequences_train")
+        if mimic_train is None or tudd_train is None:
+            raise ValueError(
+                "Both MIMIC and TUDD training sequences must be available."
+            )
+
+        # Concatenate full training sets from both datasets.
+        combined_train = mimic_train + tudd_train
+        random.shuffle(combined_train)
+
+        # --- Create full combined test set ---
+        mimic_test = self.data["mimic"].get("sequences_test")
+        tudd_test = self.data["tudd"].get("sequences_test")
+        if mimic_test is None or tudd_test is None:
+            raise ValueError("Both MIMIC and TUDD test sequences must be available.")
+
+        # Concatenate full test sets from both datasets.
+        combined_test = mimic_test + tudd_test
+        random.shuffle(combined_test)
+
+        # Save the full combined splits under a new key.
+        self.data["combined"] = {
+            "sequences_train": combined_train,
+            "sequences_test": combined_test,
+        }
+        print(
+            f"Full combined splits created: {len(combined_train)} training and {len(combined_test)} test sequences."
+        )
+
+    def create_combined_splits_50_50(self):
         """
         Creates combined training and test splits from the already pre-split MIMIC and TUDD data.
         We take balanced (stratified) samples from mimic["sequences_train"] and tudd["sequences_train"]
@@ -76,7 +116,7 @@ class DatasetManager:
             raise ValueError("Both mimic and tudd test sequences must be available.")
 
         n_test = min(len(mimic_test), len(tudd_test))
-        print(f"n_test: {n_test}")
+        # print(f"n_test: {n_test}")
         mimic_test_sample = self.stratified_sample(mimic_test, n_test)
         tudd_test_sample = self.stratified_sample(tudd_test, n_test)
         combined_test = mimic_test_sample + tudd_test_sample
