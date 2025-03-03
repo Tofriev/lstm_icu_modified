@@ -36,9 +36,9 @@ parameters = {
     # "dataset_type": "combined_mimic",
     # "dataset_type": "combined_tudd",
     "dataset_type": [  # fract only works in single run and with new_data = true
-        # "tudd_fract",
+        "tudd_fract",
         # "mimic_fract",
-        "mimic_tudd_fract",
+        # "mimic_tudd_fract",
     ],
     "shuffle_mimic_tudd_fract": False,
     "fractional_steps": 200,  # example for mimic_tudd: adds 1000 samples from tudd train to the training set of mimic for every fraction. maybe try with 200.
@@ -54,7 +54,7 @@ parameters = {
     # "models": ["lstm"],
     "models": [
         "lstm",
-        # "multi_channel_lstm",
+        "multi_channel_lstm",
     ],
     # "models": ["multi_channel_lstm"],
     # "models": ["cnn_lstm"],

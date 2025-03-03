@@ -54,7 +54,7 @@ parameters = {
     # "models": ["lstm"],
     "models": [
         "lstm",
-        # "multi_channel_lstm",
+        "multi_channel_lstm",
     ],
     # "models": ["multi_channel_lstm"],
     # "models": ["cnn_lstm"],
