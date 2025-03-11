@@ -13,7 +13,7 @@ class SHAPExplainer:
         self.shap_values = None
         self.test_data_np = None
         self.scale_factors = None
-        self.feature_names = None
+        self.feature_names = feature_names
 
     def extract_shap_values(
         self, sequences, num_samples, batch_size=10, background_pct=0.1, random_seed=42
