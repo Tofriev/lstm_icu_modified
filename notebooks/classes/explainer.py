@@ -8,11 +8,12 @@ import seaborn as sns
 
 
 class SHAPExplainer:
-    def __init__(self, model):
+    def __init__(self, model, feature_names=None):
         self.model = model
         self.shap_values = None
         self.test_data_np = None
         self.scale_factors = None
+        self.feature_names = None
 
     def extract_shap_values(
         self, sequences, num_samples, batch_size=10, background_pct=0.1, random_seed=42
@@ -227,24 +228,31 @@ class SHAPExplainer:
         plt.ylabel("Features (Sorted by Overall Mean Absolute SHAP)")
         plt.show()
 
-    def plot_single_feature_time_shap(
-        self, sample_idx, feature_idx, scaler=None, feature_name=None, output_idx=1
-    ):
-
+    def plot_single_feature_time_shap(self, sample_idx, variable_name, scaler=None, output_idx=1):
+        """
+        Plot the feature values and corresponding SHAP values over time for a single feature.
+        
+        Parameters:
+        - sample_idx: index of the sample to plot.
+        - variable_name: the name of the variable to display.
+        - scaler: (optional) scaler to inverse-transform the feature values.
+        - output_idx: index of the output from SHAP (default is 1).
+        """
         if self.shap_values is None:
-            raise ValueError(
-                "SHAP values have not been extracted. Call extract_shap_values first."
-            )
+            raise ValueError("SHAP values have not been extracted. Call extract_shap_values first.")
+        
+        if not hasattr(self, "feature_names") or self.feature_names is None:
+            raise ValueError("Feature names are not set. Please pass feature_names to the explain method.")
 
-        # time-series values for the sample & feature
+        if variable_name not in self.feature_names:
+            raise ValueError(f"Variable name '{variable_name}' not found in feature names: {self.feature_names}")
+        
+        feature_idx = self.feature_names.index(variable_name)
+
         raw_values = self.test_data_np[sample_idx, :, feature_idx]
-
-        # SHAP for sample/sequence & feature
         shap_vals = self.shap_values[output_idx][sample_idx, :, feature_idx]
 
-        # inverse scale for x acis
         if scaler is not None:
-            # Reshape to (time_steps, 1)
             feature_scale = scaler.scale_[feature_idx]
             feature_mean = scaler.mean_[feature_idx]
             feature_values = raw_values * feature_scale + feature_mean
@@ -266,16 +274,16 @@ class SHAPExplainer:
         ax2.plot(time_steps, shap_vals, color=color_shap, label="SHAP Value")
         ax2.tick_params(axis="y", labelcolor=color_shap)
 
-        if feature_name is None:
-            feature_name = f"Feature {feature_idx}"
-        plt.title(f"Feature: {feature_name} (Sample {sample_idx})")
+        plt.title(f"Feature: {variable_name} (Sample {sample_idx})")
 
+        # Combine legends from both axes.
         lines1, labels1 = ax1.get_legend_handles_labels()
         lines2, labels2 = ax2.get_legend_handles_labels()
         ax2.legend(lines1 + lines2, labels1 + labels2, loc="upper right")
 
         plt.tight_layout()
         plt.show()
+
 
     def is_probability_output(self, sample_input):
         self.model.eval()
@@ -289,13 +297,13 @@ class SHAPExplainer:
     def explain(
         self,
         sequences,
-        feature_names,
         method,
         num_samples=1000,
         scaler=None,
         numerical_features=None,
         batch_size=10,
         feature_idx=None,
+        feature_to_explain=None,
     ):
         """
         Main method to extract SHAP values and visualize based on the chosen method.
@@ -317,13 +325,13 @@ class SHAPExplainer:
             print("Model outputslogits")
 
         self.extract_shap_values(sequences, num_samples, batch_size)
-        print(feature_names)
+        print(self.feature_names)
         if (
             method == "scatter_SHAP"
             and scaler is not None
             and numerical_features is not None
         ):
-            numerical_indices = [feature_names.index(f) for f in numerical_features]
+            numerical_indices = [self.feature_names.index(f) for f in numerical_features]
             print(f"Numerical feature indices for SHAP adjustment: {numerical_indices}")
             print(f"Scale factors for SHAP adjustment: {self.scale_factors}")
             # Correctly adjust SHAP values by dividing by scale_factors
@@ -331,15 +339,16 @@ class SHAPExplainer:
             print("Adjusted SHAP values by dividing with scale factors.")
 
         if method == "ordinary_SHAP":
-            self.explain_with_ordinary_SHAP(feature_names)
+            self.explain_with_ordinary_SHAP(self.feature_names)
         elif method == "heatmap_SHAP":
-            self.plot_shap_heatmap_mean_abs(feature_names)
+            self.plot_shap_heatmap_mean_abs(self.feature_names)
         elif method == "feature_rank_heatmap_SHAP":
-            self.plot_shap_heatmap_feature_rank(feature_names)
+            self.plot_shap_heatmap_feature_rank(self.feature_names)
         elif method == "plot_single_feature_time_shap":
             self.plot_single_feature_time_shap(
-                sample_idx=1, feature_idx=-1, scaler=scaler, feature_name="age_value"
+                sample_idx=1, variable_name=feature_to_explain, scaler=scaler
             )
+
         else:
             raise ValueError(f"Unknown method: {method}")
         # ['mbp_value', 'gcs_total_value', 'glc_value', 'creatinine_value', 'potassium_value', 'hr_value', 'wbc_value', 'platelets_value', 'inr_value', 'anion_gap_value', 'lactate_value', 'temperature_value', 'weight_value', 'age_value', 'gender_value']

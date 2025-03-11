@@ -303,10 +303,10 @@ class Pipeline(object):
     def explain(self, model_name, method, num_samples=1000):
         explainer = SHAPExplainer(
             model=self.trained_models[model_name],
+            feature_names=self.feature_names,
         )
         explainer.explain(
             self.test_sequences,
-            self.feature_names,
             method,
             num_samples,
             self.scaler,
