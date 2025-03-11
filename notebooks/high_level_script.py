@@ -149,11 +149,11 @@ if isinstance(parameters["dataset_type"], list) and len(parameters["dataset_type
 else:
     ############################# Single Run #################################################
     print("Single Run")
-    pipe = Pipeline(variables=variables, parameters=parameters, new_data=True)
+    pipe = Pipeline(variables=variables, parameters=parameters, new_data=False)
     pipe.run_experiment()
     # pipe.memorize()
-    pipe.explain(model_name="lstm", method="heatmap_SHAP", num_samples=10)
-    #pipe.explain(model_name="lstm", feature_to_explain = 'age_value', method="plot_single_feature_time_shap", num_samples=100)
+    #pipe.explain(model_name="lstm", method="heatmap_SHAP", num_samples=10)
+    pipe.explain(model_name="lstm", feature_to_explain = 'age_value', method="plot_single_feature_time_shap", num_samples=10)
     # ['mbp_value', 'gcs_total_value', 'glc_value', 'creatinine_value', 'potassium_value', 'hr_value', 'wbc_value', 'platelets_value', 'inr_value', 'anion_gap_value', 'lactate_value', 'temperature_value', 'weight_value', 'age_value', 'gender_value']
 
 # print(pipe.result_dict)
