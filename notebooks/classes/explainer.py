@@ -301,9 +301,10 @@ class SHAPExplainer:
         num_samples=1000,
         scaler=None,
         numerical_features=None,
-        batch_size=10,
-        feature_idx=None,
         feature_to_explain=None,
+        batch_size=10,
+        #feature_idx=None,
+        
     ):
         """
         Main method to extract SHAP values and visualize based on the chosen method.
