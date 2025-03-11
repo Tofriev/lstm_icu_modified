@@ -5,3 +5,5 @@ notebooks/preprocessed_data.pkl
 env.yml
 user-guide.md
 workstation.txt
+venv/
+get-pip.py
