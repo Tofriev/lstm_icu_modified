@@ -1,4 +1,6 @@
-currently in progress. Small pipeline in order to predict mortality in the icu with an lstm based on mimic-IV data and data from a german university hospital.
+Currently in progress. 
+
+ML Pipeline in order to predict mortality in ICUs with differrent lstm based models. Uses sequential data extracted from the mimic-IV database and from a german university hospital.
 
 Usage: 
 - create conda env using the environment.yml
