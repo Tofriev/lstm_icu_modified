@@ -6,11 +6,11 @@ from utils import set_seed
 import json
 import os
 from classes.pipeline import MultiDatasetPipeline
-from start_utils import variables, count_features
+from start_utils import variables, count_features, count_sequential_and_static_features
 
 set_seed(42)
 n_features = count_features(variables)
-
+n_seq, n_static = count_sequential_and_static_features(variables)
 
 # model parameters work also for tudd
 parameters = {
@@ -51,9 +51,11 @@ parameters = {
     #'scaling_range': [0, 1],
     #'n_features': n_features,
     "n_features": n_features,
+    'n_seq_features': n_seq,
+    'n_static_features': n_static,
     # "models": ["lstm"],
     "models": [
-        "lstm",
+        "lstm_static",
         # "multi_channel_lstm",
     ],
     # "models": ["multi_channel_lstm"],
@@ -64,6 +66,19 @@ parameters = {
     "sparsity_check": False,  # prints
     "model_parameters": {
         "lstm": {  # model config will be input to model __init__
+            "n_hidden": 100,
+            "n_layers": 2,  # adjust this for stacked lstm
+            "n_classes": 2,  # also adjust the steps in lstm model for correct auroc calculation if this changes
+            "dropout": 0.75,
+            "bidirectional": True,
+            "learning_rate": 1e-4,
+            "weight_decay": 1e-5,
+            "class_weights": [1.0, 3.0],
+            "batch_size": 128,
+            "n_epochs": 5,  # 5
+            "gradient_clip_val": 1,
+        },
+        "lstm_static": {  # model config will be input to model __init__
             "n_hidden": 100,
             "n_layers": 2,  # adjust this for stacked lstm
             "n_classes": 2,  # also adjust the steps in lstm model for correct auroc calculation if this changes
@@ -152,8 +167,8 @@ else:
     pipe = Pipeline(variables=variables, parameters=parameters, new_data=False)
     pipe.run_experiment()
     # pipe.memorize()
-    #pipe.explain(model_name="lstm", method="heatmap_SHAP", num_samples=10)
-    pipe.explain(model_name="lstm", feature_to_explain = 'age_value', method="plot_single_feature_time_shap", num_samples=10)
+    pipe.explain(model_name="lstm_static", method="heatmap_SHAP", num_samples=10)
+    #pipe.explain(model_name="lstm_static", feature_to_explain = 'age_value', method="plot_single_feature_time_shap", num_samples=10)
     # ['mbp_value', 'gcs_total_value', 'glc_value', 'creatinine_value', 'potassium_value', 'hr_value', 'wbc_value', 'platelets_value', 'inr_value', 'anion_gap_value', 'lactate_value', 'temperature_value', 'weight_value', 'age_value', 'gender_value']
 
 # print(pipe.result_dict)

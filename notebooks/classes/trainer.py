@@ -34,7 +34,12 @@ class Trainer:
             )
 
             ModelClass = get_model_class(model_name)
-            model = ModelClass(n_features=self.parameters["n_features"], **model_config)
+            if 'lstm_static'in self.parameters['models']:
+                model = ModelClass(n_seq_features=self.parameters["n_seq_features"],
+                                   n_static_features=self.parameters["n_static_features"],
+                                     **model_config)
+            else:
+                model = ModelClass(n_features=self.parameters["n_features"], **model_config)
 
             # checkpointing, look at that later
             # checkpoint_callback = ModelCheckpoint(

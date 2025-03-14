@@ -382,26 +382,43 @@ class Preprocessor:
         # print(f'scaled: {self.data_process["scaled"].head(40)}')
 
     def create_sequences(self):
+        """
+        Create sequences by separating the time-varying (sequential) features and static features.
+        Assumes that the scaled data (df) contains columns for:
+        - sequential features: defined as f"{var}_value" for each variable at the top level (except "static_data")
+        - static features: defined as f"{key}_value" for keys in variables["static_data"] that are marked for training.
+        """
         df = self.data_process["scaled"].copy()
         sequences = []
+        
+        # Sequential features: all top-level variables (except "static_data")
+        seq_feature_names = [f"{var}_value" for var in self.variables if var != "static_data"]
+        
+        # Static features: include only those keys from static_data that are marked for training and exclude meta-keys.
+        exclude_static = {"mortality", "intime", "first_day_end", "stay_id"}
+        static_feature_names = [
+            f"{key}_value" 
+            for key, attr in self.variables["static_data"].items() 
+            if key not in exclude_static and attr.get("training", False)
+        ]
+        
         for stay_id, group in df.groupby("stay_id"):
             group = group.sort_values("charttime")
-            features = group[self.ALL_FEATURES].values
+            # Extract static features from the first row.
+            static_features = group.iloc[0][static_feature_names].values.astype(np.float32)
+            # Extract sequential (time-varying) features.
+            sequential_features = group[seq_feature_names].values.astype(np.float32)
+            # Extract the label using the target key; note that the target column is expected to be named like f"{target}_value".
             label = group[f'{self.parameters["target"]}_value'].iloc[0]
-            sequences.append((features, label))
-
-            # print(
-            #     f"stay_id: {stay_id}, features shape: {features.shape}, label: {label}"
-            # )
-            # print(f"features: {features}")  # Optional: Print the actual feature values
-            # print(f"label: {label}")  # Optional: Print the label value
-            # sequences.append((features, label))
-            # break
-
+            sequences.append((sequential_features, static_features, label))
+        
+        # Save mapping for debugging or later visualization.
         self.feature_index_mapping_sequences = {
-            index: feature for index, feature in enumerate(self.ALL_FEATURES)
+            "sequential": {idx: feature for idx, feature in enumerate(seq_feature_names)},
+            "static": {idx: feature for idx, feature in enumerate(static_feature_names)}
         }
         self.data_process["sequences"] = sequences
+
 
     def split_train_test_sequences(self):
         df = self.data_process["sequences"].copy()

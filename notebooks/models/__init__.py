@@ -2,6 +2,7 @@ from models.lstm_model import LSTMModel
 from models.multi_channel_lstm import MultiChannelLSTM
 from models.cnn_lstm import CNN_LSTM
 from models.attention_lstm import AttentionLSTM
+from models.lstm_model_static import LSTMModelWithStatic
 
 def get_model_class(model_name):
     if model_name == 'lstm':
@@ -12,5 +13,7 @@ def get_model_class(model_name):
         return CNN_LSTM
     elif model_name == 'attention_lstm':
         return AttentionLSTM
+    elif model_name == 'lstm_static':
+        return LSTMModelWithStatic
     else:
         raise ValueError(f"Unknown model: {model_name}")

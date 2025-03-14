@@ -38,3 +38,13 @@ def count_features(variables):
     count += len([key for key in variables["static_data"] if key not in exclude_keys])
 
     return count
+
+def count_sequential_and_static_features(variables):
+    # Sequential features: top-level keys except "static_data"
+    sequential_keys = [key for key in variables if key != "static_data"]
+    
+    # Static features: keys in "static_data" excluding target and meta keys.
+    exclude_static = {"mortality", "intime", "first_day_end", "stay_id"}
+    static_keys = [key for key in variables.get("static_data", {}) if key not in exclude_static]
+    
+    return len(sequential_keys), len(static_keys)
