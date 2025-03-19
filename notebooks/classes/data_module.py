@@ -1,4 +1,5 @@
 from torch.utils.data import DataLoader, WeightedRandomSampler
+from torch.utils.data import default_collate
 import pytorch_lightning as pl
 import numpy as np
 import torch
@@ -39,7 +40,7 @@ class IcuDataset(torch.utils.data.Dataset):
         return (sequence, static, label)
 
 class IcuDataModule(pl.LightningDataModule):
-    def __init__(self, train_sequences, test_sequences, batch_size, n_static_features=None):
+    def __init__(self, train_sequences, test_sequences, batch_size, model_name,  n_static_features=None):
         """
         train_sequences and test_sequences: list of tuples (sequence, static, label) OR (sequence, label)
         n_static_features: required if your sequences are only (sequence, label); used to create default static vectors.
@@ -49,6 +50,7 @@ class IcuDataModule(pl.LightningDataModule):
         self.test_sequences = test_sequences
         self.batch_size = batch_size
         self.n_static_features = n_static_features
+        self.model_name = model_name
 
     def setup(self, stage=None):
         self.train_dataset = IcuDataset(self.train_sequences, n_static_features=self.n_static_features)
@@ -75,9 +77,26 @@ class IcuDataModule(pl.LightningDataModule):
         labels = torch.tensor(labels, dtype=torch.long)
         return {"sequence": sequences, "static": statics, "label": labels}
 
+    def _get_labels(self, sequences):
+        # Determine the index for labels (index 2 if sample length 3, otherwise index 1)
+        if len(sequences[0]) == 3:
+            return [sample[2] for sample in sequences]
+        elif len(sequences[0]) == 2:
+            return [sample[1] for sample in sequences]
+        else:
+            raise ValueError("Samples should be 2- or 3-tuples.")
+
+    def _choose_collate_fn(self):
+        # If model name indicates a static lstm then use static collate_fn.
+        if self.model_name[0] is not None and "static" in self.model_name[0].lower():
+            print('return static collate')
+            return IcuDataModule.collate_fn_static
+        else:
+            print('return default collate')
+            return default_collate
+
     def train_dataloader(self):
-        # Extract labels from index 2 of each sample
-        labels = [sample[2] for sample in self.train_sequences]
+        labels = self._get_labels(self.train_sequences)
         sample_count = np.array(
             [len(np.where(np.array(labels) == t)[0]) for t in np.unique(labels)]
         )
@@ -88,7 +107,7 @@ class IcuDataModule(pl.LightningDataModule):
             self.train_dataset,
             batch_size=self.batch_size,
             sampler=sampler,
-            collate_fn=IcuDataModule.collate_fn_static,
+            collate_fn=self._choose_collate_fn(),
             num_workers=0,
         )
 
@@ -97,7 +116,7 @@ class IcuDataModule(pl.LightningDataModule):
             self.test_dataset,
             batch_size=self.batch_size,
             shuffle=False,
-            collate_fn=IcuDataModule.collate_fn_static,
+            collate_fn=self._choose_collate_fn(),
             num_workers=0,
         )
 
@@ -106,6 +125,6 @@ class IcuDataModule(pl.LightningDataModule):
             self.test_dataset,
             batch_size=self.batch_size,
             shuffle=False,
-            collate_fn=IcuDataModule.collate_fn_static,
+            collate_fn=self._choose_collate_fn(),
             num_workers=0,
         )

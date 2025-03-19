@@ -157,6 +157,7 @@ class DatasetManager:
             )
             random.shuffle(train_data_full)
             train_data_for_fractions = self.data["tudd"]["sequences_train"]
+            self.data['train_fractions'] = train_data_for_fractions
         elif "tudd_fract" in self.dataset_type:
             train_data_for_fractions = self.data["tudd"]["sequences_train"]
             random.shuffle(train_data_for_fractions)

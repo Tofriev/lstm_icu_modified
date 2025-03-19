@@ -31,6 +31,7 @@ class Trainer:
                 train_sequences=train_sequences,
                 test_sequences=test_sequences,
                 batch_size=batch_size,
+                model_name = self.parameters['models'] 
             )
 
             ModelClass = get_model_class(model_name)

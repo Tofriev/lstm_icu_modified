@@ -745,31 +745,33 @@ class Preprocessor:
                 merged_df[self.NUMERICAL_FEATURES] = scaler.fit_transform(
                     merged_df[self.NUMERICAL_FEATURES]
                 )
-        # print(f"exitus: {merged_df.head(40)}")
-        unique_stays = merged_df.groupby("stay_id").first()
-        exitus_count = unique_stays[unique_stays["exitus"] == 1].shape[0]
-        # print(f"Count of exitus == 1: {exitus_count}")
-        sequences = []
-        for stay_id, group in merged_df.groupby("stay_id"):
-            features = group[self.ALL_FEATURES].values
-            label = group["exitus"].iloc[0]
-            sequences.append((features, label))
 
+
+        sequences = []
+        seq_feature_names = [f"{var}_value" for var in self.variables if var != "static_data"]
+        exclude_static = {"mortality", "intime", "first_day_end", "stay_id"}
+        static_feature_names = [
+            f"{key}_value" 
+            for key, attr in self.variables["static_data"].items() 
+            if key not in exclude_static and attr.get("training", False)
+        ]
+
+        for stay_id, group in merged_df.groupby("stay_id"):
+            group = group.sort_values("measurement_time_from_admission")
+            static_features = group.iloc[0][static_feature_names].values.astype(np.float32)
+            sequential_features = group[seq_feature_names].values.astype(np.float32)
+            label = group["exitus"].iloc[0]
+            sequences.append((sequential_features, static_features, label))
         self.feature_index_mapping_sequences = {
-            index: feature for index, feature in enumerate(self.ALL_FEATURES)
+            "sequential": {idx: feature for idx, feature in enumerate(seq_feature_names)},
+            "static": {idx: feature for idx, feature in enumerate(static_feature_names)}
         }
 
-        # self.data_process["sequences_test"] = sequences
-        # self.data_process["sequences_train"] = []
 
-        # split train test
-        labels = [seq[1] for seq in sequences]
-        # print(f"Number of 1s in labels: {labels.count(1)}")
-        self.data_process["sequences_train"], self.data_process["sequences_test"] = (
-            train_test_split(
-                sequences,
-                test_size=0.2,
-                stratify=labels,
-                random_state=42,
-            )
+        labels = [seq[2] for seq in sequences]
+        self.data_process["sequences_train"], self.data_process["sequences_test"] = train_test_split(
+            sequences,
+            test_size=0.2,
+            stratify=labels,
+            random_state=42,
         )
