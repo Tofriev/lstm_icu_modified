@@ -3,14 +3,13 @@ import torch.nn as nn
 import pytorch_lightning as pl
 from torchmetrics.functional import auroc
 
-class LSTMModelWithStatic(pl.LightningModule):
+class LSTMModelStatic(pl.LightningModule):
     def __init__(self, n_seq_features, n_static_features, n_classes,
                  n_hidden, n_layers, dropout, bidirectional,
                  learning_rate, weight_decay, class_weights, **kwargs):
         super().__init__()
         self.save_hyperparameters()
 
-        # LSTM processes only the sequential (time series) features.
         self.lstm = nn.LSTM(
             input_size=n_seq_features,
             hidden_size=n_hidden,
@@ -20,7 +19,7 @@ class LSTMModelWithStatic(pl.LightningModule):
             bidirectional=bidirectional,
         )
         hidden_size = n_hidden * (2 if bidirectional else 1)
-        # Final classifier now concatenates LSTM output with static features.
+
         self.classifier = nn.Linear(hidden_size + n_static_features, n_classes)
         if class_weights:
             self.criterion = nn.CrossEntropyLoss(weight=torch.tensor(class_weights).float())

@@ -55,8 +55,8 @@ parameters = {
     'n_static_features': n_static,
     # "models": ["lstm"],
     "models": [
-        "lstm_static",
-        # "multi_channel_lstm",
+       # "lstm_static",
+        "multi_channel_lstm_static",
     ],
     # "models": ["multi_channel_lstm"],
     # "models": ["cnn_lstm"],
@@ -104,7 +104,7 @@ parameters = {
         #     "n_epochs": 3,
         #     "gradient_clip_val": 1,
         # },
-        "multi_channel_lstm": {
+        "multi_channel_lstm_static": {
             "n_hidden": 100,
             "n_layers": 2,
             "n_classes": 2,  # also adjust the steps in lstm model for correct auroc calculation if this changes
@@ -164,7 +164,7 @@ if isinstance(parameters["dataset_type"], list) and len(parameters["dataset_type
 else:
     ############################# Single Run #################################################
     print("Single Run")
-    pipe = Pipeline(variables=variables, parameters=parameters, new_data=True)
+    pipe = Pipeline(variables=variables, parameters=parameters, new_data=False)
     pipe.run_experiment()
     # pipe.memorize()
     #pipe.explain(model_name="lstm_static", method="heatmap_SHAP", num_samples=10)
