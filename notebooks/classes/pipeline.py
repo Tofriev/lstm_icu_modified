@@ -195,9 +195,7 @@ class Pipeline(object):
         if isinstance(dt, list):
             dt = dt[0]
         if "fractional_indices" not in self.DataManager.data:
-            raise ValueError(
-                "No fractional indices found. Make sure 'fract' is in your dataset_type."
-            )
+            raise ValueError("No fractional indices found. Make sure 'fract' is in your dataset_type.")
 
         if dt == "mimic_tudd_fract":
             test_data = self.DataManager.data["tudd"]["sequences_test"]
@@ -211,16 +209,10 @@ class Pipeline(object):
             tudd_train = self.DataManager.data["train_fractions"]
 
         self.fraction_results = {}
-        # self.fraction_models = {}
-
         fractional_indices = self.DataManager.data["fractional_indices"]
 
         for fraction_size in sorted(fractional_indices.keys()):
-            print(
-                f"\nTraining with fraction_size = {fraction_size} training samples..."
-            )
-
-            # build tudd from indices
+            print(f"\nTraining with fraction_size = {fraction_size} training samples...")
             idx_list = fractional_indices[fraction_size]
             if dt == "mimic_fract":
                 fraction_data = [mimic_train[i] for i in idx_list]
@@ -238,12 +230,8 @@ class Pipeline(object):
             result, model = local_trainer.train(fraction_data, test_data)
 
             self.fraction_results[fraction_size] = deepcopy(result)
-            # self.fraction_models[fraction_size] = deepcopy(model)
-
             del fraction_data
-            # gc.collect()
-            # torch.mps.empty_cache()
-
+            
     def visualize_fraction_results(self, save_path="fraction_results.png"):
         if not hasattr(self, "fraction_results") or not self.fraction_results:
             raise ValueError("No fractional experiment results to visualize.")

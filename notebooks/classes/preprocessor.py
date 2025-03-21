@@ -451,32 +451,32 @@ class Preprocessor:
     #     #     X[cat_feature].fillna(X[cat_feature].mode()[0], inplace=True)
 
     # TODO: put this in a separate class or one of the others
-    def generate_fractions(self):
-        print("Generating fractional datasets...")
-        mimic_train = self.sequence_dict["mimic"]["train"]
-        mimic_test = self.sequence_dict["mimic"]["test"]
-        tudd_train = self.sequence_dict["tudd"]["train"]
-        tudd_test = self.sequence_dict["tudd"]["test"]
+    # def generate_fractions(self):
+    #     print("Generating fractional datasets...")
+    #     mimic_train = self.sequence_dict["mimic"]["train"]
+    #     mimic_test = self.sequence_dict["mimic"]["test"]
+    #     tudd_train = self.sequence_dict["tudd"]["train"]
+    #     tudd_test = self.sequence_dict["tudd"]["test"]
 
-        n_tudd_train = len(tudd_train) - 2000
-        step_size = self.parameters["fractional_steps"]
-        fractional_datasets = {}
-        n_sampled_tudd_train = 0
+    #     n_tudd_train = len(tudd_train) - 2000
+    #     step_size = self.parameters["fractional_steps"]
+    #     fractional_datasets = {}
+    #     n_sampled_tudd_train = 0
 
-        while n_sampled_tudd_train + step_size < n_tudd_train:
-            n_sampled_tudd_train += step_size
+    #     while n_sampled_tudd_train + step_size < n_tudd_train:
+    #         n_sampled_tudd_train += step_size
 
-            # getg next tudd batch
-            tudd_samples = tudd_train[:n_sampled_tudd_train]
-            combined_train_set = mimic_train + tudd_samples
-            if self.shuffle == True:
-                random.shuffle(combined_train_set)
+    #         # getg next tudd batch
+    #         tudd_samples = tudd_train[:n_sampled_tudd_train]
+    #         combined_train_set = mimic_train + tudd_samples
+    #         if self.shuffle == True:
+    #             random.shuffle(combined_train_set)
 
-            fractional_datasets[n_sampled_tudd_train] = combined_train_set
+    #         fractional_datasets[n_sampled_tudd_train] = combined_train_set
 
-            print(f"fraction {n_sampled_tudd_train} added")
+    #         print(f"fraction {n_sampled_tudd_train} added")
 
-        self.sequence_dict["fractional_mimic_tudd"] = fractional_datasets
+    #     self.sequence_dict["fractional_mimic_tudd"] = fractional_datasets
 
     # TODO: put this in a separate class or one of the others
     def plot_density(self, mimic_df, tudd_df, features):

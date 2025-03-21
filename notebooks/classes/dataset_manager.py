@@ -96,54 +96,11 @@ class DatasetManager:
             f"Full combined splits created: {len(combined_train)} training and {len(combined_test)} test sequences."
         )
 
-    def create_combined_splits_50_50(self):
-        """
-        Creates combined training and test splits from the already pre-split MIMIC and TUDD data.
-        We take balanced (stratified) samples from mimic["sequences_train"] and tudd["sequences_train"]
-        (and similarly for the test sets) to form the combined splits.
-        """
-        # --- Create combined training set ---
-        mimic_train = self.data["mimic"].get("sequences_train")
-        tudd_train = self.data["tudd"].get("sequences_train")
-        if mimic_train is None or tudd_train is None:
-            raise ValueError(
-                "Both mimic and tudd training sequences must be available."
-            )
-
-        # Determine the maximum number we can take from each so that both sides contribute equally.
-        n_train = min(len(mimic_train), len(tudd_train))
-        print(f"n_train from each: {n_train}")
-        mimic_train_sample = self.stratified_sample(mimic_train, n_train)
-        tudd_train_sample = self.stratified_sample(tudd_train, n_train)
-        combined_train = mimic_train_sample + tudd_train_sample
-        random.shuffle(combined_train)
-
-        # --- Create combined test set ---
-        mimic_test = self.data["mimic"].get("sequences_test")
-        tudd_test = self.data["tudd"].get("sequences_test")
-        if mimic_test is None or tudd_test is None:
-            raise ValueError("Both mimic and tudd test sequences must be available.")
-
-        n_test = min(len(mimic_test), len(tudd_test))
-        # print(f"n_test: {n_test}")
-        mimic_test_sample = self.stratified_sample(mimic_test, n_test)
-        tudd_test_sample = self.stratified_sample(tudd_test, n_test)
-        combined_test = mimic_test_sample + tudd_test_sample
-        random.shuffle(combined_test)
-
-        self.data["combined"] = {
-            "sequences_train": combined_train,
-            "sequences_test": combined_test,
-        }
-        print(
-            f"Combined splits created: {len(combined_train)} training and {len(combined_test)} test sequences."
-        )
-
     def stratified_sample(self, sequences, sample_count):
         if sample_count == len(sequences):
             return sequences
-
-        labels = [seq[1] for seq in sequences]
+        # Updated: use index 2 of the sequence tuple (label) for stratification
+        labels = [seq[2] for seq in sequences]
         sample, _, _, _ = train_test_split(
             sequences, labels, train_size=sample_count, stratify=labels, random_state=42
         )
@@ -152,12 +109,11 @@ class DatasetManager:
     def generate_fractions(self):
         if "mimic_tudd_fract" in self.dataset_type:
             train_data_full = (
-                self.data["mimic"]["sequences_train"]
-                + self.data["mimic"]["sequences_test"]
+                self.data["mimic"]["sequences_train"] + self.data["mimic"]["sequences_test"]
             )
             random.shuffle(train_data_full)
             train_data_for_fractions = self.data["tudd"]["sequences_train"]
-            self.data['train_fractions'] = train_data_for_fractions
+            self.data["train_fractions"] = train_data_for_fractions
         elif "tudd_fract" in self.dataset_type:
             train_data_for_fractions = self.data["tudd"]["sequences_train"]
             random.shuffle(train_data_for_fractions)
@@ -178,10 +134,42 @@ class DatasetManager:
 
         while n_sampled + step_size < n_train:
             n_sampled += step_size
-            # store the indexes only to avoid memory issues
+            # Store the indices only to avoid memory issues
             fractional_indices[n_sampled] = list(range(n_sampled))
 
         self.data["fractional_indices"] = fractional_indices
+
+    def create_combined_splits_50_50(self):
+        # --- Create combined training set ---
+        mimic_train = self.data["mimic"].get("sequences_train")
+        tudd_train = self.data["tudd"].get("sequences_train")
+        if mimic_train is None or tudd_train is None:
+            raise ValueError("Both mimic and tudd training sequences must be available.")
+
+        n_train = min(len(mimic_train), len(tudd_train))
+        print(f"n_train from each: {n_train}")
+        mimic_train_sample = self.stratified_sample(mimic_train, n_train)
+        tudd_train_sample = self.stratified_sample(tudd_train, n_train)
+        combined_train = mimic_train_sample + tudd_train_sample
+        random.shuffle(combined_train)
+
+        # --- Create combined test set ---
+        mimic_test = self.data["mimic"].get("sequences_test")
+        tudd_test = self.data["tudd"].get("sequences_test")
+        if mimic_test is None or tudd_test is None:
+            raise ValueError("Both mimic and tudd test sequences must be available.")
+
+        n_test = min(len(mimic_test), len(tudd_test))
+        mimic_test_sample = self.stratified_sample(mimic_test, n_test)
+        tudd_test_sample = self.stratified_sample(tudd_test, n_test)
+        combined_test = mimic_test_sample + tudd_test_sample
+        random.shuffle(combined_test)
+
+        self.data["combined"] = {
+            "sequences_train": combined_train,
+            "sequences_test": combined_test,
+        }
+        print(f"Combined splits created: {len(combined_train)} training and {len(combined_test)} test sequences.")
 
     def preprocess(self, data_type: str):
         sequences_dict = {}
