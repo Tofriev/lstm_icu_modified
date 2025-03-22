@@ -86,24 +86,36 @@ class SHAPExplainer:
             shap_values_batches.append(shap_values_batch)
             print(f"Processed batch {i // batch_size + 1}")
         
-        if len(shap_values_batches) == 1:
-            self.shap_values = shap_values_batches[0]
-            np.set_printoptions(threshold=np.inf, linewidth=200, suppress=True)
-            print(f'SHAP VALS: {self.shap_values}')
-        #     for i, shap_val in enumerate(self.shap_values):
-        #         print(f"Input {i}: {shap_val[0]}")
-        #         shap_df = pd.DataFrame(shap_val[0][0])
-        #         print(shap_df)
-        #         continue
-        else:
-            num_inputs = len(shap_values_batches[0])
-            self.shap_values = [
-                np.concatenate([np.array(batch[i]) for batch in shap_values_batches], axis=0)
-                for i in range(num_inputs)
-            ]
+        print(shap_values_batches[0][0][0])
+        print(shap_values_batches[0][0][0].shape)
+        print(shap_values_batches[0][0][1])
+        print(shap_values_batches[0][0][1].shape)
         
-        # for idx, sv in enumerate(self.shap_values):
-        #     print(f"Aggregated SHAP values for input {idx} shape: {sv.shape}"
+        aggregated_shap_values = []
+        num_inputs = len(shap_values_batches[0][0])
+        for i in range(num_inputs):
+            arrays = [np.array(batch[i]) for batch in shap_values_batches[0]]
+            # Check if the arrays are sequential (3D) or static (2D)
+            if arrays[0].ndim == 3:
+                # For sequential data, pad along the time axis if necessary
+                max_time = max(arr.shape[1] for arr in arrays)
+                padded_arrays = []
+                for arr in arrays:
+                    if arr.shape[1] < max_time:
+                        pad_width = ((0, 0), (0, max_time - arr.shape[1]), (0, 0))
+                        arr_padded = np.pad(arr, pad_width, mode='constant')
+                        padded_arrays.append(arr_padded)
+                    else:
+                        padded_arrays.append(arr)
+                aggregated = np.concatenate(padded_arrays, axis=0)
+            elif arrays[0].ndim == 2:
+                # For static data, no padding is needed; just concatenate
+                aggregated = np.concatenate(arrays, axis=0)
+            else:
+                raise ValueError("Unexpected SHAP array dimension.")
+            aggregated_shap_values.append(aggregated)
+        self.shap_values = aggregated_shap_values
+
 
 
 
@@ -126,19 +138,26 @@ class SHAPExplainer:
         )
     
     def plot_shap_heatmap_feature_rank(self, feature_names):
-        """
-        Plot a heatmap showing the mean feature rank over time (sequential input).
-        """
-        print("Plotting SHAP heatmap (mean feature rank)...")
+        print("Plotting SHAP heatmap (mean feature rank) for all inputs...")
         if self.shap_values is None:
             raise ValueError("Run extract_shap_values first.")
-        shap_values = np.abs(self.shap_values[0])
-        ranks = np.argsort(np.argsort(-shap_values, axis=2), axis=2) + 1
-        mean_ranks = ranks.mean(axis=0)  # (time_steps, n_seq_features)
-        overall_mean = mean_ranks.mean(axis=0)  # (n_seq_features,)
+        
+        shap_seq = self.shap_values[0]      # shape: (num_samples, time_steps, n_seq_features)
+        shap_static = self.shap_values[1]     # shape: (num_samples, n_static_features)
+        
+        ts_length = self.test_seq_data_np.shape[1] if self.test_seq_data_np is not None else 10
+        shap_static_repl = self.replicate_static(shap_static, ts_length)  # shape: (num_samples, ts_length, n_static_features)
+        
+        shap_combined = np.concatenate([shap_seq, shap_static_repl], axis=2)
+        
+        shap_abs = np.abs(shap_combined)
+        ranks = np.argsort(np.argsort(-shap_abs, axis=2), axis=2) + 1  # shape: (num_samples, ts_length, total_features)
+        mean_ranks = ranks.mean(axis=0)  # average over samples, shape: (ts_length, total_features)
+        overall_mean = mean_ranks.mean(axis=0)  # average over time, shape: (total_features,)
+        
         sorted_indices = np.argsort(overall_mean)
         sorted_feature_names = [feature_names[i] for i in sorted_indices]
-        sorted_mean_ranks = mean_ranks[:, sorted_indices].T  # (n_seq_features, time_steps)
+        sorted_mean_ranks = mean_ranks[:, sorted_indices].T  # shape: (total_features, ts_length)
         
         time_steps = sorted_mean_ranks.shape[1]
         df = pd.DataFrame(
@@ -148,77 +167,118 @@ class SHAPExplainer:
         )
         plt.figure(figsize=(10, 8))
         sns.heatmap(df, cmap="Reds_r", annot=False, fmt=".2f", cbar_kws={"label": "Mean Rank"})
-        plt.title("SHAP Heatmap (Mean Feature Rank)")
+        plt.title("SHAP Heatmap (Mean Feature Rank) for All Inputs")
         plt.xlabel("Time Steps")
         plt.ylabel("Features (Sorted by Overall Importance)")
         plt.show()
-    
+
+
     def plot_shap_heatmap_mean_abs(self, feature_names):
-        """
-        Plot a heatmap showing the mean absolute SHAP score per feature at each timestep (sequential input).
-        """
-        print("Plotting SHAP heatmap (mean absolute SHAP) for sequential input...")
-        if self.shap_values is None:
-            raise ValueError("Run extract_shap_values first.")
-        for output_idx, class_shap in enumerate(self.shap_values):
-            print(f"Processing SHAP values for input {output_idx}...")
-            shap_abs = np.abs(class_shap)
-            mean_abs = shap_abs.mean(axis=0)  # (time_steps, n_seq_features)
-            overall_mean = mean_abs.mean(axis=0)  # (n_seq_features,)
-            sorted_indices = np.argsort(overall_mean)[::-1]
-            sorted_feature_names = [feature_names[i] for i in sorted_indices]
-            sorted_mean_abs = mean_abs[:, sorted_indices].T  # (n_seq_features, time_steps)
-            time_steps = sorted_mean_abs.shape[1]
-            df = pd.DataFrame(
-                sorted_mean_abs,
-                index=sorted_feature_names,
-                columns=[f"Time {i}" for i in range(time_steps)]
-            )
-            plt.figure(figsize=(10, 8))
-            sns.heatmap(df, cmap="Reds", annot=False, fmt=".2f", cbar_kws={"label": "Mean Absolute SHAP Score"})
-            plt.title(f"SHAP Heatmap (Mean Absolute SHAP) – Input {output_idx}")
-            plt.xlabel("Time Steps")
-            plt.ylabel("Features (Sorted by Overall Importance)")
-            plt.show()
     
-    def plot_single_feature_time_shap(self, sample_idx, variable_name, scaler=None):
-        """
-        Plot sequential feature values and corresponding SHAP values over time for a single feature.
-        """
+        print("Plotting SHAP heatmap (mean absolute SHAP) for all inputs...")
         if self.shap_values is None:
             raise ValueError("Run extract_shap_values first.")
-        if not self.feature_names:
-            raise ValueError("Set feature_names in the explainer.")
-        if variable_name not in self.feature_names:
-            raise ValueError(f"Variable '{variable_name}' not found in feature names.")
         
-        feature_idx = self.feature_names.index(variable_name)
-        raw_values = self.test_seq_data_np[sample_idx, :, feature_idx]
-        if scaler is not None:
-            feature_values = raw_values * scaler.scale_[feature_idx] + scaler.mean_[feature_idx]
+        shap_seq = self.shap_values[0]      # shape: (num_samples, time_steps, n_seq_features)
+        shap_static = self.shap_values[1]     # shape: (num_samples, n_static_features)
+        
+        ts_length = self.test_seq_data_np.shape[1] if self.test_seq_data_np is not None else 10
+        shap_static_repl = self.replicate_static(shap_static, ts_length)
+        
+        shap_combined = np.concatenate([shap_seq, shap_static_repl], axis=2)
+        
+        shap_abs = np.abs(shap_combined)
+        mean_abs = shap_abs.mean(axis=0)   # shape: (ts_length, total_features)
+        overall_mean = mean_abs.mean(axis=0) # shape: (total_features,)
+        
+        sorted_indices = np.argsort(overall_mean)[::-1]
+        sorted_feature_names = [feature_names[i] for i in sorted_indices]
+        sorted_mean_abs = mean_abs[:, sorted_indices].T  # shape: (total_features, ts_length)
+        
+        time_steps = sorted_mean_abs.shape[1]
+        df = pd.DataFrame(
+            sorted_mean_abs,
+            index=sorted_feature_names,
+            columns=[f"Time {i}" for i in range(time_steps)]
+        )
+        plt.figure(figsize=(10, 8))
+        sns.heatmap(df, cmap="Reds", annot=False, fmt=".2f", cbar_kws={"label": "Mean Absolute SHAP Score"})
+        plt.title("SHAP Heatmap (Mean Absolute SHAP) for All Inputs")
+        plt.xlabel("Time Steps")
+        plt.ylabel("Features (Sorted by Overall Importance)")
+        plt.show()
+
+
+    
+    def plot_single_feature_time_shap(self, sample_idx, variable_name, scaler=None, input_type=None, feature_idx=None):
+        """
+        Plot feature values and corresponding SHAP values over time for a single feature.
+        For static inputs (2D SHAP array), the single value is replicated over all time steps.
+        input_type: either 'sequential' or 'static'
+        """
+  
+        if input_type == 'sequential':
+            branch_idx = 0
+            shap_array = self.shap_values[branch_idx]
+            data_array = self.test_seq_data_np
+        elif input_type == 'static':
+            branch_idx = 1
+            shap_array = self.shap_values[branch_idx]
+            data_array = self.test_static_data_np
         else:
-            feature_values = raw_values
-        time_steps = np.arange(len(feature_values))
+            raise ValueError("input_type must be either 'sequential' or 'static'.")
+
         
-        for output_idx, shap_vals_input in enumerate(self.shap_values):
-            shap_vals = shap_vals_input[sample_idx, :, feature_idx]
-            fig, ax1 = plt.subplots(figsize=(10, 5))
-            ax1.set_xlabel("Time Step")
-            ax1.set_ylabel("Feature Value", color="tab:blue")
-            ax1.plot(time_steps, feature_values, color="tab:blue", label="Feature Value")
-            ax1.tick_params(axis="y", labelcolor="tab:blue")
-            
-            ax2 = ax1.twinx()
-            ax2.set_ylabel("SHAP Value", color="tab:red")
-            ax2.plot(time_steps, shap_vals, color="tab:red", label="SHAP Value")
-            ax2.tick_params(axis="y", labelcolor="tab:red")
-            
-            plt.title(f"Feature: {variable_name} (Sample {sample_idx}, Input {output_idx})")
-            lines1, labels1 = ax1.get_legend_handles_labels()
-            lines2, labels2 = ax2.get_legend_handles_labels()
-            ax2.legend(lines1 + lines2, labels1 + labels2, loc="upper right")
-            plt.tight_layout()
-            plt.show()
+        if input_type == 'sequential':
+            ts_length = data_array.shape[1]
+            raw_values = data_array[sample_idx, :, feature_idx]
+            feature_scale = scaler.scale_[feature_idx]
+            feature_mean = scaler.mean_[feature_idx]
+            feature_values = raw_values * feature_scale + feature_mean
+        else: 
+            ts_length = self.test_seq_data_np.shape[1] if self.test_seq_data_np is not None else 10
+            raw_value = data_array[sample_idx, feature_idx]
+            raw_values = np.repeat(raw_value, ts_length)
+            feature_scale = scaler.scale_[feature_idx]
+            feature_mean = scaler.mean_[feature_idx]
+            feature_values = raw_values * feature_scale + feature_mean
+            print(feature_values)
+        
+        if shap_array.ndim == 3:
+            shap_vals = shap_array[sample_idx, :, feature_idx]
+        elif shap_array.ndim == 2:
+            static_shap = shap_array[sample_idx, feature_idx]
+            shap_vals = np.repeat(static_shap, ts_length)
+        else:
+            raise ValueError("Unexpected SHAP array dimension.")
+
+        time_steps = np.arange(ts_length)
+        
+        fig, ax1 = plt.subplots(figsize=(10, 5))
+        ax1.set_xlabel("Time Step")
+        ax1.set_ylabel("Feature Value", color="tab:blue")
+        ax1.plot(time_steps, feature_values, color="tab:blue", label="Feature Value")
+        ax1.tick_params(axis="y", labelcolor="tab:blue")
+        
+        ax2 = ax1.twinx()
+        ax2.set_ylabel("SHAP Value", color="tab:red")
+        ax2.plot(time_steps, shap_vals, color="tab:red", label="SHAP Value")
+        ax2.tick_params(axis="y", labelcolor="tab:red")
+        
+
+        if input_type == 'static':
+            smin, smax = ax2.get_ylim()
+            shift = 0.05 * (smax - smin)
+            ax2.set_ylim(smin + shift, smax + shift)
+
+        plt.title(f"Feature: {variable_name} (Sample {sample_idx}, Branch: {input_type})")
+        lines1, labels1 = ax1.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax2.legend(lines1 + lines2, labels1 + labels2, loc="upper right")
+        plt.tight_layout()
+        plt.show()
+
+
     
     def is_probability_output(self, sample_input):
         """
@@ -233,7 +293,7 @@ class SHAPExplainer:
             return np.all((output_np >= 0.0) & (output_np <= 1.0))
     
     def explain(self, sequences, method, num_samples=1000, scaler=None, numerical_features=None,
-                feature_to_explain=None, batch_size=10):
+                feature_to_explain=None,  feature_type= None, feature_idx=None, batch_size=10):
         """
         Main method to extract and visualize SHAP values.
         sequences: list of tuples (sequential_features, static_features, label)
@@ -257,9 +317,16 @@ class SHAPExplainer:
         elif method == "feature_rank_heatmap_SHAP":
             self.plot_shap_heatmap_feature_rank(self.feature_names)
         elif method == "plot_single_feature_time_shap":
-            self.plot_single_feature_time_shap(sample_idx=1, variable_name=feature_to_explain, scaler=scaler)
+            self.plot_single_feature_time_shap(sample_idx=4, variable_name=feature_to_explain, scaler=scaler,input_type=feature_type, feature_idx=feature_idx)
         else:
             raise ValueError(f"Unknown method: {method}")
+    
+    def replicate_static(self, shap_array, time_steps):
+        # shap_array shape: (num_samples, n_features)
+        # Returns a replicated array of shape: (num_samples, time_steps, n_features)
+        return np.repeat(shap_array[:, np.newaxis, :], time_steps, axis=1)
+
+
 
 
 class LogitWrapper(torch.nn.Module):

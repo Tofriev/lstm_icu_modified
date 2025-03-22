@@ -288,7 +288,7 @@ class Pipeline(object):
                 json.dump(self.result_dict, f, indent=4)
             print(f"Results saved to {self.results_path}")
 
-    def explain(self, model_name, method, num_samples=1000, feature_to_explain = None):
+    def explain(self, model_name, method, num_samples=1000, feature_to_explain = None, feature_type=None, feature_idx=None):
         explainer = SHAPExplainer(
             model=self.trained_models[model_name],
             feature_names=self.feature_names,
@@ -300,6 +300,8 @@ class Pipeline(object):
             self.scaler,
             self.numerical_features,
             feature_to_explain,
+            feature_type,
+            feature_idx
         )
 
     def memorize(self, file_path="parameters_results.csv"):
