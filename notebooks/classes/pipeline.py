@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from classes.dataset_manager import DatasetManager
 from classes.trainer import Trainer
-from classes.explainer import SHAPExplainer
+from classes.explainer import ExtractSHAPExplainer
 import sys
 import json
 import random
@@ -288,20 +288,21 @@ class Pipeline(object):
                 json.dump(self.result_dict, f, indent=4)
             #print(f"Results saved to {self.results_path}")
 
-    def explain(self, model_name, method, num_samples=1000, feature_to_explain = None, feature_type=None, feature_idx=None):
-        explainer = SHAPExplainer(
-            model=self.trained_models[model_name],
-            feature_names=self.feature_names,
-        )
+    def explain(self, model_name, method, num_samples=1000, feature_to_explain=None, feature_type=None, feature_idx=None, sample_idx=None):
+        model = self.trained_models[model_name]
+        feature_names = self.feature_names
+
+        explainer = ExtractSHAPExplainer(model=model, feature_names=feature_names)
         explainer.explain(
-            self.test_sequences,
-            method,
-            num_samples,
-            self.scaler,
-            self.numerical_features,
-            feature_to_explain,
-            feature_type,
-            feature_idx
+            sample_idx = sample_idx,
+            sequences=self.test_sequences,  
+            model_name=model_name,
+            num_samples=num_samples,
+            method=method,
+            feature_idx=feature_idx,
+            feature_to_explain=feature_to_explain,
+            scaler=self.scaler,
+            batch_size=10  
         )
 
     def memorize(self, file_path="parameters_results.csv"):
