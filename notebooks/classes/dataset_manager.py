@@ -30,32 +30,32 @@ class DatasetManager:
 
     def load_data(self):
         if "mimic" in self.dataset_type or "combined" in self.dataset_type:
-            print("Loading MIMIC data...")
+            #print("Loading MIMIC data...")
             self.data["mimic"] = {}
             self.load_mimic()
             if self.parameters.get("small_data", False):
                 self.reduce_data()
             self.preprocess("mimic")
-            print(
-                f"MIMIC - Training sequences: {len(self.data['mimic']['sequences_train'])}, Test sequences: {len(self.data['mimic']['sequences_test'])}"
-            )
+            # print(
+            #     f"MIMIC - Training sequences: {len(self.data['mimic']['sequences_train'])}, Test sequences: {len(self.data['mimic']['sequences_test'])}"
+            # )
 
         if "tudd" in self.dataset_type or "combined" in self.dataset_type:
-            print("Loading TUDD data...")
+            #print("Loading TUDD data...")
             self.data["tudd"] = {}
             self.load_tudd()
             self.preprocess("tudd")
 
-            print(
-                f"TUDD - Training sequences: {len(self.data['tudd']['sequences_train'])}, Test sequences: {len(self.data['tudd']['sequences_test'])}"
-            )
+            # print(
+            #     f"TUDD - Training sequences: {len(self.data['tudd']['sequences_train'])}, Test sequences: {len(self.data['tudd']['sequences_test'])}"
+            # )
 
         if "combined" in self.dataset_type:
-            print("Creating combined splits...")
+            #print("Creating combined splits...")
             self.create_combined_splits_50_50()
             # self.create_combined_splits_full()
         if "fract" in self.dataset_type:
-            print("Creating fractional splits...")
+            #print("Creating fractional splits...")
             self.generate_fractions()
 
     def create_combined_splits_full(self):
@@ -92,9 +92,9 @@ class DatasetManager:
             "sequences_train": combined_train,
             "sequences_test": combined_test,
         }
-        print(
-            f"Full combined splits created: {len(combined_train)} training and {len(combined_test)} test sequences."
-        )
+        # print(
+        #     f"Full combined splits created: {len(combined_train)} training and {len(combined_test)} test sequences."
+        # )
 
     def stratified_sample(self, sequences, sample_count):
         if sample_count == len(sequences):
@@ -147,7 +147,7 @@ class DatasetManager:
             raise ValueError("Both mimic and tudd training sequences must be available.")
 
         n_train = min(len(mimic_train), len(tudd_train))
-        print(f"n_train from each: {n_train}")
+       # print(f"n_train from each: {n_train}")
         mimic_train_sample = self.stratified_sample(mimic_train, n_train)
         tudd_train_sample = self.stratified_sample(tudd_train, n_train)
         combined_train = mimic_train_sample + tudd_train_sample
@@ -169,7 +169,7 @@ class DatasetManager:
             "sequences_train": combined_train,
             "sequences_test": combined_test,
         }
-        print(f"Combined splits created: {len(combined_train)} training and {len(combined_test)} test sequences.")
+       # print(f"Combined splits created: {len(combined_train)} training and {len(combined_test)} test sequences.")
 
     def preprocess(self, data_type: str):
         sequences_dict = {}
@@ -215,7 +215,7 @@ class DatasetManager:
             self.scaler = preprocessor_tudd.scaler
 
     def load_mimic(self):
-        print("Loading MIMIC data...")
+        #print("Loading MIMIC data...")
         for variable, _ in self.variables.items():
             file_path = os.path.join(self.mimic_datapath, f"{variable}.csv")
             if os.path.exists(file_path):
@@ -231,10 +231,10 @@ class DatasetManager:
                         list(static_data_keys)
                     ]
 
-            else:
-                print(
-                    f"Warning: {variable}.csv does not exist in {self.mimic_datapath}"
-                )
+            # else:
+            #     print(
+            #         f"Warning: {variable}.csv does not exist in {self.mimic_datapath}"
+            #     )
 
     def load_tudd(self):
         file_path = os.path.join(self.tudd_datapath, "measurement.csv")
@@ -244,7 +244,7 @@ class DatasetManager:
             )
         else:
             raise FileNotFoundError(f"{file_path} does not exist.")
-        print(self.data["tudd"]["measurements"].head())
+        #print(self.data["tudd"]["measurements"].head())
         mortality_info_path = os.path.join(self.tudd_datapath, "stays.csv")
         if os.path.exists(mortality_info_path):
             self.data["tudd"]["mortality_info"] = pd.read_csv(

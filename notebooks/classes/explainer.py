@@ -4,6 +4,7 @@ import torch
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
+import torch.nn.functional as F
 import pandas as pd
 import seaborn as sns
 import json
@@ -11,6 +12,7 @@ import json
 
 class SHAPExplainer:
     def __init__(self, model, feature_names=None, dual_shap_plot=True):
+        self.orig_model = model 
         self.model = model
         self.shap_values = None
         self.test_seq_data_np = None   # (num_samples, time_steps, n_seq_features)
@@ -41,12 +43,13 @@ class SHAPExplainer:
         seq_list = [s[0] for s in sequences]
         all_seq_data_np = self.pad_sequences(seq_list)  # shape: (total_samples, max_time_steps, n_seq_features)
         all_static_data_np = np.array([s[1] for s in sequences])  # shape: (total_samples, n_static_features)
+        all_labels_np = np.array([s[2] for s in sequences]) 
         total_samples = all_seq_data_np.shape[0]
         
-        print(f"Sequential data shape (after padding): {all_seq_data_np.shape}")
-        print(f"Static data shape: {all_static_data_np.shape}")
-        print("First sequential sample:\n", all_seq_data_np[0])
-        print("First static sample:\n", all_static_data_np[0])
+        # print(f"Sequential data shape (after padding): {all_seq_data_np.shape}")
+        # print(f"Static data shape: {all_static_data_np.shape}")
+        # print("First sequential sample:\n", all_seq_data_np[0])
+        # print("First static sample:\n", all_static_data_np[0])
         
 
         np.random.seed(random_seed)
@@ -56,27 +59,30 @@ class SHAPExplainer:
         background_idx = indices[:num_background]
         test_idx = indices[num_background:]
         
-        print(f"N background samples: {num_background}")
-        print(f"N test samples before limiting: {len(test_idx)}")
+        # print(f"N background samples: {num_background}")
+        # print(f"N test samples before limiting: {len(test_idx)}")
         
         background_seq_np = all_seq_data_np[background_idx]
         background_static_np = all_static_data_np[background_idx]
         test_seq_np = all_seq_data_np[test_idx]
         test_static_np = all_static_data_np[test_idx]
+        test_labels_np = all_labels_np[test_idx]
+        self.test_labels_np = test_labels_np
         
         if num_samples > len(test_seq_np):
             num_samples = len(test_seq_np)
         test_seq_np = test_seq_np[:num_samples]
         test_static_np = test_static_np[:num_samples]
         
+        
 
         self.test_seq_data_np = test_seq_np
         self.test_static_data_np = test_static_np
         
-        print(f"Background sequential shape: {background_seq_np.shape}")
-        print(f"Background static shape: {background_static_np.shape}")
-        print(f"Test sequential shape: {test_seq_np.shape}")
-        print(f"Test static shape: {test_static_np.shape}")
+        # print(f"Background sequential shape: {background_seq_np.shape}")
+        # print(f"Background static shape: {background_static_np.shape}")
+        # print(f"Test sequential shape: {test_seq_np.shape}")
+        # print(f"Test static shape: {test_static_np.shape}")
 
         background_seq_tensor = torch.tensor(background_seq_np).float()
         background_static_tensor = torch.tensor(background_static_np).float()
@@ -89,7 +95,7 @@ class SHAPExplainer:
            
             shap_values_batch = explainer.shap_values([batch_seq, batch_static])
             shap_values_batches.append(shap_values_batch)
-            print(f"Processed batch {i // batch_size + 1}")
+            #print(f"Processed batch {i // batch_size + 1}")
     
         # [ [shap_seq_class0, shap_static_class0], [shap_seq_class1, shap_static_class1] ]
         aggregated_shap_values = []
@@ -122,7 +128,7 @@ class SHAPExplainer:
         """
         Visualize the SHAP summary plot using the sequential input.
         """
-        print("Visualizing ordinary SHAP summary plot...")
+        #print("Visualizing ordinary SHAP summary plot...")
         num_features = self.test_seq_data_np.shape[2]
         aggregated_shap_values = self.shap_values[1][0].mean(axis=1)   # (num_samples, n_seq_features)
         aggregated_test_data = self.test_seq_data_np.mean(axis=1)      # (num_samples, n_seq_features)
@@ -135,7 +141,7 @@ class SHAPExplainer:
         )
     
     def plot_shap_heatmap_feature_rank(self, feature_names):
-        print("Plotting SHAP heatmap (mean feature rank) for all inputs...")
+        #("Plotting SHAP heatmap (mean feature rank) for all inputs...")
         if self.shap_values is None:
             raise ValueError("Run extract_shap_values first.")
         
@@ -199,7 +205,7 @@ class SHAPExplainer:
             plt.show()
 
     def plot_shap_heatmap_mean_abs(self, feature_names):
-        print("Plotting SHAP heatmap (mean absolute SHAP) for all inputs...")
+        #print("Plotting SHAP heatmap (mean absolute SHAP) for all inputs...")
         if self.shap_values is None:
             raise ValueError("Run extract_shap_values first.")
 
@@ -292,52 +298,37 @@ class SHAPExplainer:
             plt.show()
 
     def plot_single_feature_time_shap(self, sample_idx, variable_name, scaler=None, input_type=None, feature_idx=None):
-        """
-        Plot feature values and corresponding SHAP values over time for a single feature.
-        For static inputs (2D SHAP array), the single value is replicated over all time steps.
-        input_type: either 'sequential' or 'static'.
-        """
         if input_type == 'sequential':
             branch_idx = 0
             data_array = self.test_seq_data_np
+            ts_length = data_array.shape[1]
+            raw_values = data_array[sample_idx, :, feature_idx]
         elif input_type == 'static':
             branch_idx = 1
             data_array = self.test_static_data_np
-        else:
-            raise ValueError("input_type must be either 'sequential' or 'static'.")
-
-        if input_type == 'sequential':
-            ts_length = data_array.shape[1]
-            raw_values = data_array[sample_idx, :, feature_idx]
-        else:
             ts_length = self.test_seq_data_np.shape[1] if self.test_seq_data_np is not None else 10
             raw_value = data_array[sample_idx, feature_idx]
             raw_values = np.repeat(raw_value, ts_length)
-        
+        else:
+            raise ValueError("input_type must be either 'sequential' or 'static'.")
+
         if scaler is not None:
             feature_scale = scaler.scale_[feature_idx]
             feature_mean = scaler.mean_[feature_idx]
             feature_values = raw_values * feature_scale + feature_mean
         else:
             feature_values = raw_values
-        
+
         time_steps = np.arange(ts_length)
 
         fig, ax1 = plt.subplots(figsize=(10, 5))
         ax1.set_xlabel("Time Step")
         ax1.set_ylabel("Feature Value", color="black")
-
-        ax1.plot(
-            time_steps, feature_values,
-            color="black",
-            linewidth=2.5,
-            label="Feature Value"
-        )
+        ax1.plot(time_steps, feature_values, color="black", linewidth=2.5, label="Feature Value")
         ax1.tick_params(axis="y", labelcolor="black")
 
         ax2 = ax1.twinx()
         ax2.set_ylabel("SHAP Value", color="black")
-
         shap_all_values = []
 
         if self.dual_shap_plot:
@@ -349,40 +340,23 @@ class SHAPExplainer:
                 shap_surv = self.shap_values[0][branch_idx][sample_idx, feature_idx]
                 shap_vals_non_surv = np.repeat(shap_non, ts_length)
                 shap_vals_surv = np.repeat(shap_surv, ts_length)
-            
-            ax2.plot(
-                time_steps, shap_vals_non_surv,
-                color="tab:red",
-                linestyle="--",
-                linewidth=1.5,
-                alpha=0.6,
-                label="SHAP (Non Survival)"
-            )
-            ax2.plot(
-                time_steps, shap_vals_surv,
-                color="tab:blue",
-                linestyle="--",
-                linewidth=1.5,
-                alpha=0.6,
-                label="SHAP (Survival)"
-            )
+
+            ax2.plot(time_steps, shap_vals_non_surv, color="tab:red", linestyle="--", linewidth=1.5,
+                    alpha=0.6, label="SHAP (Non Survival)")
+            ax2.plot(time_steps, shap_vals_surv, color="tab:blue", linestyle="--", linewidth=1.5,
+                    alpha=0.6, label="SHAP (Survival)")
             shap_all_values.extend(shap_vals_non_surv)
             shap_all_values.extend(shap_vals_surv)
+
         else:
             if input_type == 'sequential':
                 shap_vals = self.shap_values[1][branch_idx][sample_idx, :, feature_idx]
             else:
                 shap_val = self.shap_values[1][branch_idx][sample_idx, feature_idx]
                 shap_vals = np.repeat(shap_val, ts_length)
-            
-            ax2.plot(
-                time_steps, shap_vals,
-                color="tab:red",
-                linestyle="--",
-                linewidth=1.5,
-                alpha=0.6,
-                label="SHAP (Non Survival)"
-            )
+
+            ax2.plot(time_steps, shap_vals, color="tab:red", linestyle="--", linewidth=1.5,
+                    alpha=0.6, label="SHAP (Non Survival)")
             shap_all_values.extend(shap_vals)
 
         if len(shap_all_values) > 0:
@@ -392,18 +366,66 @@ class SHAPExplainer:
             ax2.set_ylim(min_val - margin, max_val + margin)
         ax2.tick_params(axis="y", labelcolor="black")
 
+
         if input_type == 'static':
             smin, smax = ax2.get_ylim()
             shift = 0.05 * (smax - smin)
             ax2.set_ylim(smin + shift, smax + shift)
 
-        plt.title(f"Feature: {variable_name} (Sample {sample_idx}, Branch: {input_type})")
+        plt.title(f"Feature: {variable_name} (Sample {sample_idx})")
         lines1, labels1 = ax1.get_legend_handles_labels()
         lines2, labels2 = ax2.get_legend_handles_labels()
         ax2.legend(lines1 + lines2, labels1 + labels2, loc="upper right")
 
-        plt.tight_layout()
+
+        plt.subplots_adjust(bottom=0.16)  
+
+        actual_label_val = self.test_labels_np[sample_idx]
+        actual_label_str = "Survival" if actual_label_val == 0 else "Non Survival"
+
+        self.orig_model.eval()
+        with torch.no_grad():
+            sample_seq = self.test_seq_data_np[sample_idx : sample_idx+1]
+            sample_static = self.test_static_data_np[sample_idx : sample_idx+1]
+            seq_tensor = torch.tensor(sample_seq).float()
+            static_tensor = torch.tensor(sample_static).float()
+            out = self.orig_model(seq_tensor, static_tensor)
+            out = out.squeeze()  
+
+            p_non_surv = None
+            predicted_class_str = None
+            if out.dim() == 0:
+                p_non_surv = float(out.item())
+                p_non_surv = max(min(p_non_surv, 1.0), 0.0)
+                p_surv = 1.0 - p_non_surv
+                predicted_class_str = "Non Survival" if p_non_surv >= 0.5 else "Survival"
+            elif out.shape[0] == 2:
+                probs = torch.softmax(out, dim=0)
+                p_surv = probs[0].item()
+                p_non_surv = probs[1].item()
+                predicted_class_str = "Survival" if p_surv >= p_non_surv else "Non Survival"
+                predicted_class_p = p_surv if p_surv >= p_non_surv else p_non_surv
+
+
+        text_str = (
+            f"Predicted: {predicted_class_str} "
+            f"(P={predicted_class_p:.2f}) "
+            f"Actual: {actual_label_str}"
+        )
+
+        fig.text(
+            0.5, 0.02,             
+            text_str,
+            ha='center',
+            va='bottom',
+            fontsize=10,
+            bbox=dict(facecolor='white', alpha=0.8, boxstyle='round,pad=0.5')
+        )
+
         plt.show()
+
+
+
 
 
     
@@ -415,7 +437,7 @@ class SHAPExplainer:
         self.model.eval()
         with torch.no_grad():
             output = self.model(*sample_input)
-            print(f"Model output: {output}")
+            #print(f"Model output: {output}")
             output_np = output.cpu().numpy().flatten()
             return np.all((output_np >= 0.0) & (output_np <= 1.0))
     
@@ -430,15 +452,15 @@ class SHAPExplainer:
         sample_torch = (torch.tensor(sample_np_seq).float(), torch.tensor(sample_np_static).float())
         
         if self.is_probability_output(sample_torch):
-            print("Model outputs probabilities: wrapping to logits...")
+           # print("Model outputs probabilities: wrapping to logits...")
             self.model = LogitWrapper(self.model)
-        else:
-            print("Model outputs logits.")
+        # else:
+        #     print("Model outputs logits.")
         
         self.extract_shap_values(sequences, num_samples, batch_size)
         if save_shap_values:
             self.save_shap_values("shap_values.json")
-        print("Feature names:", self.feature_names)
+       # print("Feature names:", self.feature_names)
         if method == "ordinary_SHAP":
             self.explain_with_ordinary_SHAP(self.feature_names)
         elif method == "heatmap_SHAP":
@@ -472,8 +494,9 @@ class SHAPExplainer:
         }
         with open(save_path, "w") as f:
             json.dump(data_to_save, f, indent=4)
-        print(f"SHAP values saved to {save_path}")
+        #print(f"SHAP values saved to {save_path}")
 
+    
 
 class LogitWrapper(torch.nn.Module):
     """

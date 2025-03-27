@@ -55,13 +55,13 @@ class IcuDataModule(pl.LightningDataModule):
     def setup(self, stage=None):
         self.train_dataset = IcuDataset(self.train_sequences, n_static_features=self.n_static_features)
         self.test_dataset = IcuDataset(self.test_sequences, n_static_features=self.n_static_features)
-        print("Number of training sequences:", len(self.train_dataset))
-        print("Number of test sequences:", len(self.test_dataset))
+        # print("Number of training sequences:", len(self.train_dataset))
+        # print("Number of test sequences:", len(self.test_dataset))
         # Print out first few samples for debugging
         for i in range(3):
             sample = self.train_dataset[i]
             seq, static, label = sample
-            print(f"Train sample {i}: Sequence shape={seq.shape}, Static shape={np.array(static).shape}, Label={label}")
+           # print(f"Train sample {i}: Sequence shape={seq.shape}, Static shape={np.array(static).shape}, Label={label}")
 
     @staticmethod
     def collate_fn_static(batch):
@@ -89,10 +89,10 @@ class IcuDataModule(pl.LightningDataModule):
     def _choose_collate_fn(self):
         # If model name indicates a static lstm then use static collate_fn.
         if self.model_name[0] is not None and "static" in self.model_name[0].lower():
-            print('return static collate')
+            #print('return static collate')
             return IcuDataModule.collate_fn_static
         else:
-            print('return default collate')
+            #print('return default collate')
             return default_collate
 
     def train_dataloader(self):

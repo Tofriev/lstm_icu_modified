@@ -69,11 +69,11 @@ class Trainer:
                 devices=1,
                 gradient_clip_val=model_config["gradient_clip_val"],
             )
-            print("Using device:", next(model.parameters()).device)
+            # print("Using device:", next(model.parameters()).device)
 
-            print("Training sequences sample:")
-            print("Train Sequence Shape:", train_sequences[0][0].shape)
-            print("Test Sequence Shape:", test_sequences[0][0].shape)
+            # print("Training sequences sample:")
+            # print("Train Sequence Shape:", train_sequences[0][0].shape)
+            # print("Test Sequence Shape:", test_sequences[0][0].shape)
 
             pl_trainer.fit(model, data_module)
             result = pl_trainer.test(model, data_module)

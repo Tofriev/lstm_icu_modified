@@ -15,30 +15,30 @@ n_seq, n_static = count_sequential_and_static_features(variables)
 # model parameters work also for tudd
 parameters = {
     "target": "mortality",
-   # "dataset_type": "mimic_mimic",
+   "dataset_type": "mimic_mimic",
    #  "dataset_type": "tudd_tudd",
     # "dataset_type": ["mimic_mimic", "mimic_tudd"],
     # "dataset_type": "tudd_mimic",
     # "dataset_type": "mimic_tudd",
-    "dataset_type": [
-       # "mimic_combined",
-        #"tudd_combined",
-        # "combined_combined",
-        # "combined_mimic",
-        # "combined_tudd",
-        #     "tudd_tudd",
-             "mimic_mimic",
-        #     "mimic_tudd",
-        #     "tudd_mimic",
-    ],
+    # "dataset_type": [
+    #    # "mimic_combined",
+    #     #"tudd_combined",
+    #     # "combined_combined",
+    #     # "combined_mimic",
+    #     # "combined_tudd",
+    #     #     "tudd_tudd",
+    #     #     "mimic_mimic",
+    #     #     "mimic_tudd",
+    #     #     "tudd_mimic",
+    # ],
     # ,
     # "dataset_type": "combined_combined",
     # "dataset_type": "combined_mimic",
     # "dataset_type": "combined_tudd",
     # "dataset_type": [  # fract only works in single run and with new_data = true
     #     #"tudd_fract",
-    #     # "mimic_fract",
-    #     "mimic_tudd_fract",
+    #      "mimic_fract",
+    #    # "mimic_tudd_fract",
     # ],
     "shuffle_mimic_tudd_fract": False,
     "fractional_steps": 1000,  # example for mimic_tudd: adds 1000 samples from tudd train to the training set of mimic for every fraction. maybe try with 200.
@@ -56,7 +56,7 @@ parameters = {
     # "models": ["lstm"],
     "models": [
         "lstm_static",
-       # "multi_channel_lstm_static",
+       #"multi_channel_lstm_static",
     ],
     # "models": ["multi_channel_lstm"],
     # "models": ["cnn_lstm"],
@@ -167,8 +167,8 @@ else:
     pipe = Pipeline(variables=variables, parameters=parameters, new_data=False)
     pipe.run_experiment()
     # pipe.memorize()
-    pipe.explain(model_name="lstm_static", method="heatmap_SHAP", num_samples=10)
-    #pipe.explain(model_name="lstm_static", feature_to_explain = 'age', method="plot_single_feature_time_shap", num_samples=10, feature_type='static', feature_idx=0)
+    #pipe.explain(model_name="lstm_static", method="heatmap_SHAP", num_samples=10)
+    pipe.explain(model_name="lstm_static", feature_to_explain = 'mbp_value', method="plot_single_feature_time_shap", num_samples=10, feature_type='sequential', feature_idx=0)
     # ['mbp_value', 'gcs_total_value', 'glc_value', 'creatinine_value', 'potassium_value', 'hr_value', 'wbc_value', 'platelets_value', 'inr_value', 'anion_gap_value', 'lactate_value', 'temperature_value', 'weight_value', 
     #['age_value', 'gender_value']
 

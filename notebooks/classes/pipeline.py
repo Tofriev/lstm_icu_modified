@@ -73,7 +73,7 @@ class Pipeline(object):
         if (
             os.path.exists(train_file) and os.path.exists(test_file)
         ) and not self.force_preprocess:
-            print("Loading preprocessed train and test splits from cache...")
+            #print("Loading preprocessed train and test splits from cache...")
             with open(train_file, "rb") as f:
                 train_data = pickle.load(f)
             with open(test_file, "rb") as f:
@@ -91,7 +91,7 @@ class Pipeline(object):
                 "test": test_data["data"],
             }
         else:
-            print("Preprocessing data from scratch...")
+            #print("Preprocessing data from scratch...")
             self.DataManager = DatasetManager(
                 variables=self.variables, parameters=self.parameters
             )
@@ -279,14 +279,14 @@ class Pipeline(object):
 
             with open(self.results_path, "w") as f:
                 json.dump(self.fraction_results, f, indent=4)
-            print(f"Fraction experiment results saved to {self.results_path}")
+            #print(f"Fraction experiment results saved to {self.results_path}")
 
         else:
             # NORMAL TRAINING
             self.train()
             with open(self.results_path, "w") as f:
                 json.dump(self.result_dict, f, indent=4)
-            print(f"Results saved to {self.results_path}")
+            #print(f"Results saved to {self.results_path}")
 
     def explain(self, model_name, method, num_samples=1000, feature_to_explain = None, feature_type=None, feature_idx=None):
         explainer = SHAPExplainer(
@@ -383,12 +383,12 @@ class MultiDatasetPipeline(Pipeline):
         for ds in self.dataset_types:
             # Update parameters for current dataset type.
             self.parameters["dataset_type"] = ds
-            print(f"\n=== Running experiments for dataset '{ds}' ===")
+            #print(f"\n=== Running experiments for dataset '{ds}' ===")
             # Prepare data for this dataset type.
             self.prepare_data()
             for model in model_list:
                 self.parameters["models"] = [model]
-                print(f"\n--- Training with model '{model}' on dataset '{ds}' ---")
+                #print(f"\n--- Training with model '{model}' on dataset '{ds}' ---")
                 self.train()
                 if explain_method:
                     self.explain(
@@ -409,5 +409,5 @@ class MultiDatasetPipeline(Pipeline):
         self.results_path = os.path.join(project_root, "results.json")
         with open(self.results_path, "w") as f:
             json.dump(all_results, f, indent=4)
-        print(f"All results saved to {self.results_path}")
+        #print(f"All results saved to {self.results_path}")
         return all_results

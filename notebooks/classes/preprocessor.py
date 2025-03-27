@@ -50,9 +50,9 @@ class Preprocessor:
         missing_per_row = df[feature_cols].isnull().sum(axis=1)
         avg_missing_per_row = missing_per_row.mean()
         avg_missing_per_100 = avg_missing_per_row * 100
-        print(
-            f"Average missing values per 100 samples (rows): {avg_missing_per_100:.2f}"
-        )
+        # print(
+        #     f"Average missing values per 100 samples (rows): {avg_missing_per_100:.2f}"
+        # )
 
         # Compute missingness per sequence (group by stay_id)
         def seq_missing_info(group):
@@ -68,10 +68,10 @@ class Preprocessor:
         missing_pcts = [info[1] for info in seq_info]
         avg_missing_count_seq = np.mean(missing_counts)
         avg_missing_pct_seq = np.mean(missing_pcts)
-        print(
-            f"Average missing values per sequence (absolute count): {avg_missing_count_seq:.2f}"
-        )
-        print(f"Average missing percentage per sequence: {avg_missing_pct_seq:.2f}%")
+        # print(
+        #     f"Average missing values per sequence (absolute count): {avg_missing_count_seq:.2f}"
+        # )
+        # print(f"Average missing percentage per sequence: {avg_missing_pct_seq:.2f}%")
 
     def process(self):
 
@@ -118,7 +118,7 @@ class Preprocessor:
         self.variable_conversion_and_aggregation()
         self.create_time_grid()
         self.merge_on_time_grid()
-        print("MIMIC missing values statistics:")
+       # print("MIMIC missing values statistics:")
         # self.print_missing_stats(self.data_process["merged"])
         self.impute()
         self.scale_normalize()
@@ -129,7 +129,7 @@ class Preprocessor:
         """
         converts vars in the static data and aggregate all data on specified time frequency
         """
-        print("aggregating...")
+        #print("aggregating...")
         if not "aggregated" in self.data_process:
             self.data_process["aggregated"] = {}
         else:
@@ -169,7 +169,7 @@ class Preprocessor:
         This function creates a time grid, afterwards we have a df with two colummns:
         stay_id and charttime with all the time points for the first 24hs for each stay_id
         """
-        print("creating time grid...")
+        #print("creating time grid...")
         static_df = self.data_process["aggregated"]["static_data"]
         df_list = []
         for _, row in static_df.iterrows():
@@ -190,7 +190,7 @@ class Preprocessor:
         """
         This function merges all datga on the time ghrid
         """
-        print("merging on time grid...")
+        #print("merging on time grid...")
         merged_df_without_static = self.time_grid.copy()
         # fist merge all non static data on the time grid
         for variable in self.data_process["aggregated"].keys():
@@ -271,7 +271,7 @@ class Preprocessor:
         # print(f"imputed: {self.data_process['imputed'].head(40)}")
 
     def impute_with_ffill_bfill(self, df):
-        print("imputing with ffill and bfill...")
+        #print("imputing with ffill and bfill...")
         if self.data_type == "mimic":
             df.sort_values(["stay_id", "charttime"], inplace=True)
         elif self.data_type == "tudd":
@@ -323,7 +323,7 @@ class Preprocessor:
         """
         counts the number of stay_id's that have no observations at all for a feature
         """
-        print("checking for stay ids with missing observations for a feature")
+        #print("checking for stay ids with missing observations for a feature")
         total_stay_ids = df["stay_id"].nunique()
         missing_observations = {}
         features = [col for col in df.columns if col in self.ALL_FEATURES]
@@ -344,16 +344,16 @@ class Preprocessor:
                 missing_stay_ids,
             )
 
-        for feature, (count, percentage, stay_ids) in missing_observations.items():
-            print(f"{feature}: {count} stay_id(s) with no observations")
-            print(f"{percentage:.2f}% of total stay_ids")
-            print(f"First 100 missing stay IDs for {feature}: {stay_ids[:100]}\n")
+        # for feature, (count, percentage, stay_ids) in missing_observations.items():
+        #     print(f"{feature}: {count} stay_id(s) with no observations")
+        #     print(f"{percentage:.2f}% of total stay_ids")
+        #     print(f"First 100 missing stay IDs for {feature}: {stay_ids[:100]}\n")
 
     def scale_normalize(self):
         df = self.data_process["imputed"].copy()
 
         if self.parameters["scaling"] == "Standard":
-            print("scaling with StandardScaler...")
+            #print("scaling with StandardScaler...")
             if self.scaler:  # if scaler was given to init, use it
                 print("using preasigned scaler")
             else:
@@ -363,7 +363,7 @@ class Preprocessor:
             )
 
         elif self.parameters["scaling"] == "MinMax":
-            print("scaling with MinMaxScaler...")
+            #print("scaling with MinMaxScaler...")
             if self.scaler:
                 print("using preasigned scaler")
             else:
@@ -429,7 +429,7 @@ class Preprocessor:
         )
         self.data_process["sequences_train"] = sequence_dict["train"]
         self.data_process["sequences_test"] = sequence_dict["test"]
-        print(self.data_process["sequences_train"][0])
+       # print(self.data_process["sequences_train"][0])
 
     #     stay_ids_to_drop = X.groupby('stay_id')[self.NUMERICAL_FEATURES].apply(
     #         lambda group: group.isnull().all(axis=0).any()
@@ -490,8 +490,8 @@ class Preprocessor:
             plt.ylabel("Density")
             plt.legend()
             plt.show()
-            print(f"Mean {feature} MIMIC: {mimic_df[feature].mean()}")
-            print(f"Mean {feature} TUDD: {tudd_df[feature].mean()}")
+            # print(f"Mean {feature} MIMIC: {mimic_df[feature].mean()}")
+            # print(f"Mean {feature} TUDD: {tudd_df[feature].mean()}")
 
     def process_tudd(self):
         measurements = self.data_process["pre_processing"]["measurements"].copy()
@@ -623,12 +623,12 @@ class Preprocessor:
             on="stay_id",
             how="inner",
         )
-        print("TUDD missing values statistics:")
-        self.print_missing_stats(merged_df)
+        # print("TUDD missing values statistics:")
+        # self.print_missing_stats(merged_df)
 
-        # print unique treatment names before mapping
-        print("Unique treatment names before mapping:")
-        print(merged_df.columns.unique())
+        # # print unique treatment names before mapping
+        # print("Unique treatment names before mapping:")
+        # print(merged_df.columns.unique())
 
         # rename
         treatmentnames_mapping = {
@@ -650,12 +650,12 @@ class Preprocessor:
         merged_df.rename(columns=treatmentnames_mapping, inplace=True)
 
         # print unique treatment names after mapping
-        print("Unique treatment names after mapping:")
-        print(merged_df.columns.unique())
+        # print("Unique treatment names after mapping:")
+        # print(merged_df.columns.unique())
 
-        print(
-            f'number of unique stay_ids before renaming and bounding: {merged_df["stay_id"].nunique()}'
-        )
+        # print(
+        #     f'number of unique stay_ids before renaming and bounding: {merged_df["stay_id"].nunique()}'
+        # )
         # bounds
         bounds = {
             "age": (18, 90),
@@ -673,9 +673,9 @@ class Preprocessor:
             "lactate_value": (0.1, 200),
             "creatinine_value": (0.1, 20),
         }
-        print(
-            f'number of unique stay_ids after bounding: {merged_df["stay_id"].nunique()}'
-        )
+        # print(
+        #     f'number of unique stay_ids after bounding: {merged_df["stay_id"].nunique()}'
+        # )
         # if self.parameters['small_data']:
         #     fraction = 0.1
         #     patient_sample = merged_df[['stay_id', 'exitus']].drop_duplicates().groupby('exitus', group_keys=False).apply(
