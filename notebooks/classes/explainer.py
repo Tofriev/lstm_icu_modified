@@ -20,7 +20,7 @@ class SHAPExplainerBase:
         self.feature_names = feature_names
 
         # Variables that will be set after extraction or loading:
-        self.shap_values = None       # structure: [[seq_class0, static_class0], [seq_class1, static_class1]]
+        self.shap_values = None       # structure: [[seq_class0, static_class0], [seq_class1, static_cl ass1]]
         self.test_seq_data_np = None  # test sequential data (num_samples, time_steps, n_seq_features)
         self.test_static_data_np = None  # test static data (num_samples, n_static_features)
         self.test_labels_np = None    # test labels (num_samples,)
@@ -95,15 +95,16 @@ class SHAPExplainerBase:
         plt.tight_layout()
         plt.show()
 
-    def plot_single_feature_time_shap(self, sample_idx, feature_to_explain, scaler=None, input_type='sequential', feature_idx=None):
+    def plot_single_feature_time_shap(self, sample_idx, feature_to_explain, input_type='sequential', feature_idx=None):
         """
         Plot a single feature's values over time together with the corresponding Non-Survival SHAP values.
         Also annotate the plot with predicted and actual class.
+        Uses saved predictions (if available) for the annotation.
         """
         if self.shap_values is None:
             raise ValueError("SHAP values have not been set. Run extraction or load from file first.")
         
-        # Select data based on input_type.
+
         if input_type == 'sequential':
             branch_idx = 0
             data_array = self.test_seq_data_np
@@ -118,12 +119,18 @@ class SHAPExplainerBase:
         else:
             raise ValueError("input_type must be either 'sequential' or 'static'.")
 
-        if scaler is not None:
-            feature_scale = scaler.scale_[feature_idx]
-            feature_mean = scaler.mean_[feature_idx]
-            feature_values = raw_values * feature_scale + feature_mean
+        # Apply descaling if scaler is provided.
+        if self.scaler is not None:
+            # Works for both a fitted scaler object or a dummy scaler loaded from JSON.
+            try:
+                feature_scale = self.scaler.scale_[feature_idx]
+                feature_mean = self.scaler.mean_[feature_idx]
+                feature_values = raw_values * feature_scale + feature_mean
+            except Exception as e:
+                print("Error in descaling:", e)
+                feature_values = raw_values
         else:
-            feature_values = raw_values
+            raise ValueError('No Scaler found.')
 
         time_steps = np.arange(ts_length)
         fig, ax1 = plt.subplots(figsize=(10, 5))
@@ -142,7 +149,7 @@ class SHAPExplainerBase:
         ax2 = ax1.twinx()
         ax2.set_ylabel("SHAP Value [Non-Survival]")
         ax2.plot(time_steps, shap_vals_non_surv, color="red", linestyle="--", linewidth=1.5,
-                 alpha=0.6, label="SHAP (Non Survival)")
+                alpha=0.6, label="SHAP (Non Survival)")
         min_val = np.min(shap_vals_non_surv)
         max_val = np.max(shap_vals_non_surv)
         margin = 0.1 * (max_val - min_val) if (max_val - min_val) != 0 else 0.1
@@ -161,47 +168,30 @@ class SHAPExplainerBase:
         actual_label_val = self.test_labels_np[sample_idx]
         actual_label_str = "Survival" if actual_label_val == 0 else "Non Survival"
 
-        self.orig_model.eval()
-        with torch.no_grad():
-            seq_t = torch.tensor(self.test_seq_data_np[sample_idx : sample_idx+1]).float()
-            stat_t = torch.tensor(self.test_static_data_np[sample_idx : sample_idx+1]).float()
-            out = self.orig_model(seq_t, stat_t).squeeze()
-            predicted_class_str = ""
+        if hasattr(self, "predictions") and (self.predictions is not None):
+            pred = self.predictions[sample_idx]
+            p_surv = pred["p_surv"]
+            p_non_surv = pred["p_non_surv"]
+            if p_surv >= p_non_surv:
+                predicted_class_str = "Survival"
+                predicted_prob = p_surv
+            else:
+                predicted_class_str = "Non Survival"
+                predicted_prob = p_non_surv
+        else:
+            predicted_class_str = "N/A"
             predicted_prob = 0.0
-            if out.dim() == 0:
-                p_non_surv = float(out.item())
-                p_surv = 1.0 - p_non_surv
-                if p_non_surv >= 0.5:
-                    predicted_class_str = "Non Survival"
-                    predicted_prob = p_non_surv
-                else:
-                    predicted_class_str = "Survival"
-                    predicted_prob = p_surv
-            elif out.shape[0] == 2:
-                probs = torch.softmax(out, dim=0)
-                p_surv = probs[0].item()
-                p_non_surv = probs[1].item()
-                if p_surv >= p_non_surv:
-                    predicted_class_str = "Survival"
-                    predicted_prob = p_surv
-                else:
-                    predicted_class_str = "Non Survival"
-                    predicted_prob = p_non_surv
 
         text_str = (
             f"Predicted: {predicted_class_str} (P={predicted_prob:.2f})\n"
             f"Actual: {actual_label_str}"
         )
-        # fig.text(
-        #     0.5, 0.01, text_str,
-        #     ha='center', va='bottom', fontsize=10,
-        #     bbox=dict(facecolor='white', alpha=0.8, boxstyle='round,pad=0.5')
-        # )
         ax_annot.text(0.5, 0.5, text_str,
-                  ha='center', va='center', fontsize=10,
-                  bbox=dict(facecolor='white', alpha=0.8, boxstyle='round,pad=0.5'))
-        #plt.tight_layout()
+                    ha='center', va='center', fontsize=10,
+                    bbox=dict(facecolor='white', alpha=0.8, boxstyle='round,pad=0.5'))
         plt.show()
+
+
 
 
 ###############################################################################
@@ -285,14 +275,45 @@ class ExtractSHAPExplainer(SHAPExplainerBase):
 
     def save_shap_values(self, model_name, num_samples, shap_dir="SHAP_scores"):
         """
-        Save the SHAP values and test data to a JSON file.
+        Save the SHAP values, test data, predictions, and metadata (feature names and scaler parameters)
+        to a JSON file.
         The file name will be "{model_name}_{num_samples}.json" in folder shap_dir.
         """
         if self.shap_values is None:
             raise ValueError("No SHAP values to save. Run extract_shap_values() first.")
+        
         os.makedirs(shap_dir, exist_ok=True)
-        filename = f"{model_name}_{num_samples}.json"
-        full_path = os.path.join(shap_dir, filename)
+        json_filename = f"{model_name}_{num_samples}.json"
+        json_full_path = os.path.join(shap_dir, json_filename)
+        
+        predictions = []
+        self.orig_model.eval()
+        with torch.no_grad():
+            for i in range(len(self.test_seq_data_np)):
+                seq_t = torch.tensor(self.test_seq_data_np[i : i+1]).float()
+                stat_t = torch.tensor(self.test_static_data_np[i : i+1]).float()
+                out = self.orig_model(seq_t, stat_t).squeeze()
+                if out.dim() == 0:
+                    p_non_surv = float(out.item())
+                    p_surv = 1.0 - p_non_surv
+                elif out.shape[0] == 2:
+                    probs = torch.softmax(out, dim=0)
+                    p_surv = probs[0].item()
+                    p_non_surv = probs[1].item()
+                else:
+                    raise ValueError("Unexpected output shape from the model.")
+                predictions.append({"p_surv": p_surv, "p_non_surv": p_non_surv})
+        
+        metadata = {"feature_names": self.feature_names}
+        if hasattr(self, "scaler") and self.scaler is not None:
+            print('access Scaler saving')
+            print(self.scaler.mean_)
+
+            metadata["scaler"] = {
+                "mean": self.scaler.mean_.tolist(),
+                "scale": self.scaler.scale_.tolist()
+            }
+        
         data_to_save = {
             "shap_values": {
                 "label_0": {
@@ -308,24 +329,32 @@ class ExtractSHAPExplainer(SHAPExplainerBase):
                 "seq": self.test_seq_data_np.tolist(),
                 "static": self.test_static_data_np.tolist(),
                 "labels": self.test_labels_np.tolist()
-            }
+            },
+            "predictions": predictions,
+            "metadata": metadata
         }
-        with open(full_path, "w") as f:
+        
+        with open(json_full_path, "w") as f:
             json.dump(data_to_save, f, indent=4)
-        print(f"SHAP values and test data saved to {full_path}")
+        
+        print(f"SHAP values, test data, predictions, and metadata saved to {json_full_path}")
 
-    def explain(self,sequences, model_name, num_samples=1000, batch_size=10, save_shap=True, method="plot_single_feature_time_shap", **kwargs):
+
+
+
+    def explain(self,sequences, model_name, num_samples=1000, batch_size=10, save_shap=True, method="plot_single_feature_time_shap",scaler=None, **kwargs):
         """
         Main method: extract new SHAP values from the given sequences, save them if desired,
         and then run a plotting method.
         """
+        self.scaler=scaler
         self.extract_shap_values(sequences, num_samples, batch_size)
         if save_shap:
             self.save_shap_values(model_name, num_samples)
         if method == "plot_shap_heatmap_mean_abs":
             self.plot_shap_heatmap_mean_abs()
         elif method == "plot_single_feature_time_shap":
-            # Expecting kwargs: feature_idx, feature_to_explain, scaler, input_type
+            #  kwargs: feature_idx, feature_to_explain, input_type
             self.plot_single_feature_time_shap(**kwargs)
         else:
             raise ValueError(f"Unknown plotting method: {method}")
@@ -337,14 +366,18 @@ class ExtractSHAPExplainer(SHAPExplainerBase):
 class LoadSHAPExplainer(SHAPExplainerBase):
     def load_shap_values(self, model_name, num_samples, shap_dir="SHAP_scores"):
         """
-        Load the SHAP values and test data from a JSON file.
+        Load the SHAP values, test data, predictions, and metadata (including feature names and scaler parameters)
+        from a JSON file.
         """
+        import os, json
         filename = f"{model_name}_{num_samples}.json"
         full_path = os.path.join(shap_dir, filename)
         if not os.path.exists(full_path):
             raise FileNotFoundError(f"File not found: {full_path}")
+        
         with open(full_path, "r") as f:
             data = json.load(f)
+        
         shap_data = data["shap_values"]
         self.shap_values = [
             [np.array(shap_data["label_0"]["sequential"]), np.array(shap_data["label_0"]["static"])],
@@ -354,4 +387,24 @@ class LoadSHAPExplainer(SHAPExplainerBase):
         self.test_seq_data_np = np.array(test_data["seq"])
         self.test_static_data_np = np.array(test_data["static"])
         self.test_labels_np = np.array(test_data["labels"])
-        print(f"Loaded SHAP values and test data from {full_path}")
+        
+        # Load predictions if available.
+        self.predictions = data.get("predictions", None)
+        
+        # Load metadata (e.g., feature names and scaler) if available.
+        metadata = data.get("metadata", {})
+        if "feature_names" in metadata:
+            self.feature_names = metadata["feature_names"]
+        if "scaler" in metadata:
+            scaler_info = metadata["scaler"]
+            # Create a simple dummy object to hold these attributes.
+            class DummyScaler:
+                pass
+            dummy = DummyScaler()
+            dummy.mean_ = np.array(scaler_info["mean"])
+            dummy.scale_ = np.array(scaler_info["scale"])
+            self.scaler = dummy
+        
+        print(f"Loaded SHAP values, test data, predictions, and metadata from {full_path}")
+
+
