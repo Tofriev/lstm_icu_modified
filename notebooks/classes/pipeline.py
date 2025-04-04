@@ -29,6 +29,94 @@ class Pipeline(object):
         os.makedirs(self.preprocessed_dir, exist_ok=True)
         self.results_path = os.path.join(project_root, "results.json")
 
+    def make_pkl_datasets(self):
+        """
+        Creates pickle files for individual dataset splits using two different scalers.
+        
+        First, it creates mimic and tudd splits (and combined splits) using a DatasetManager instance
+        that loads mimic first (thus obtaining the mimic scaler). These are saved with a "_mimic_scaler" suffix.
+        
+        Then, it creates a new DatasetManager instance and manually loads TUDD first (so that the TUDD scaler is used)
+        followed by mimic. The resulting splits are saved with a "_tudd_scaler" suffix.
+        """
+        # ----------------------------
+        # Instance 1: Using mimic scaler
+        # ----------------------------
+        print("Generating pickle datasets using mimic scaler (instance 1)...")
+        print("MIMIC")
+        dm1 = DatasetManager(variables=self.variables, parameters=self.parameters)
+        dm1.data["mimic"] = {}
+        dm1.load_mimic()
+        dm1.preprocess("mimic")
+        feature_names = dm1.feature_names
+        numerical_features = dm1.numerical_features
+        print('TUDD')
+        dm1.data["tudd"] = {}
+        dm1.load_tudd()
+        dm1.preprocess("tudd")
+        
+        # Retrieve splits from dm1
+        mimic_train_1 = dm1.data["mimic"]["sequences_train"]
+        mimic_test_1 = dm1.data["mimic"]["sequences_test"]
+        tudd_train_1 = dm1.data["tudd"]["sequences_train"]
+        tudd_test_1 = dm1.data["tudd"]["sequences_test"]
+
+        # Define file paths (with a mimic scaler suffix)
+        mimic_train_file_1 = os.path.join(self.preprocessed_dir, "mimic_train_mimic_scaler.pkl")
+        mimic_test_file_1 = os.path.join(self.preprocessed_dir, "mimic_test_mimic_scaler.pkl")
+        tudd_train_file_1 = os.path.join(self.preprocessed_dir, "tudd_train_mimic_scaler.pkl")
+        tudd_test_file_1 = os.path.join(self.preprocessed_dir, "tudd_test_mimic_scaler.pkl")
+
+        # Save individual splits with mimic scaler
+        with open(mimic_train_file_1, "wb") as f:
+            pickle.dump({"data": mimic_train_1, "scaler": dm1.scaler, "feature_names":feature_names, "numerical_features": numerical_features}, f)
+        with open(mimic_test_file_1, "wb") as f:
+            pickle.dump({"data": mimic_test_1}, f)
+        with open(tudd_train_file_1, "wb") as f:
+            pickle.dump({"data": tudd_train_1}, f)
+        with open(tudd_test_file_1, "wb") as f:
+            pickle.dump({"data": tudd_test_1}, f)
+
+        # ----------------------------
+        # Instance 2: Using tudd scaler
+        # ----------------------------
+        print("Generating pickle datasets using tudd scaler (instance 2)...")
+        print("TUDD")
+        dm2 = DatasetManager(variables=self.variables, parameters=self.parameters)
+        # Instead of using load_data(), manually load TUDD first to obtain the tudd scaler.
+        dm2.data["tudd"] = {}
+        dm2.load_tudd()
+        dm2.preprocess("tudd")
+        feature_names = dm2.feature_names
+        numerical_features = dm2.numerical_features
+        # print("MIMIC")
+        # # Now load mimic after TUDD so that the scaler remains from TUDD.
+        # dm2.data["mimic"] = {}
+        # dm2.load_mimic()
+        # dm2.preprocess("mimic")
+
+        # # Retrieve splits from dm2
+        # mimic_train_2 = dm2.data["mimic"]["sequences_train"]
+        # mimic_test_2 = dm2.data["mimic"]["sequences_test"]
+        tudd_train_2 = dm2.data["tudd"]["sequences_train"]
+        tudd_test_2 = dm2.data["tudd"]["sequences_test"]
+
+        # # Define file paths (with a tudd scaler suffix)
+        # mimic_train_file_2 = os.path.join(self.preprocessed_dir, "mimic_train_tudd_scaler.pkl")
+        # mimic_test_file_2 = os.path.join(self.preprocessed_dir, "mimic_test_tudd_scaler.pkl")
+        tudd_train_file_2 = os.path.join(self.preprocessed_dir, "tudd_train_tudd_scaler.pkl")
+        tudd_test_file_2 = os.path.join(self.preprocessed_dir, "tudd_test_tudd_scaler.pkl")
+
+        # # Save individual splits with tudd scaler
+        # with open(mimic_train_file_2, "wb") as f:
+        #     pickle.dump({"data": mimic_train_2, "scaler": dm2.scaler, "feature_names":feature_names, "numerical_features": numerical_features}, f)
+        # with open(mimic_test_file_2, "wb") as f:
+        #     pickle.dump({"data": mimic_test_2}, f)
+        with open(tudd_train_file_2, "wb") as f:
+            pickle.dump({"data": tudd_train_2, "scaler": dm2.scaler, "feature_names":feature_names, "numerical_features": numerical_features}, f)
+        with open(tudd_test_file_2, "wb") as f:
+            pickle.dump({"data": tudd_test_2}, f)
+
     def prepare_data(self):
         dt = self.parameters["dataset_type"]
         if isinstance(dt, list) and len(dt) == 1:
@@ -37,14 +125,14 @@ class Pipeline(object):
         if "fract" not in dt:
             # Determine which files to load based on dataset type
             if dt == "mimic_mimic":
-                train_file = os.path.join(self.preprocessed_dir, "mimic_train.pkl")
-                test_file = os.path.join(self.preprocessed_dir, "mimic_test.pkl")
+                train_file = os.path.join(self.preprocessed_dir, "mimic_train_mimic_scaler.pkl")
+                test_file = os.path.join(self.preprocessed_dir, "mimic_test_mimic_scaler.pkl")
             elif dt == "tudd_tudd":
-                train_file = os.path.join(self.preprocessed_dir, "tudd_train.pkl")
-                test_file = os.path.join(self.preprocessed_dir, "tudd_test.pkl")
+                train_file = os.path.join(self.preprocessed_dir, "tudd_train_tudd_scaler.pkl")
+                test_file = os.path.join(self.preprocessed_dir, "tudd_test_tudd_scaler.pkl")
             elif dt == "mimic_tudd":
-                train_file = os.path.join(self.preprocessed_dir, "mimic_train.pkl")
-                test_file = os.path.join(self.preprocessed_dir, "tudd_test.pkl")
+                train_file = os.path.join(self.preprocessed_dir, "mimic_train_mimic_scaler.pkl")
+                test_file = os.path.join(self.preprocessed_dir, "tudd_test_mimic_scaler.pkl")
             elif dt == "tudd_mimic":
                 train_file = os.path.join(self.preprocessed_dir, "tudd_train.pkl")
                 test_file = os.path.join(self.preprocessed_dir, "mimic_test.pkl")
@@ -91,7 +179,7 @@ class Pipeline(object):
                 "test": test_data["data"],
             }
         else:
-            #print("Preprocessing data from scratch...")
+            print("Preprocessing data from scratch...")
             self.DataManager = DatasetManager(
                 variables=self.variables, parameters=self.parameters
             )
@@ -99,6 +187,7 @@ class Pipeline(object):
             # Extract metadata from the full dataset manager.
             self.feature_names = self.DataManager.feature_names
             self.scaler = self.DataManager.scaler
+            print(f'SCALER FROM DATAMANAGER {self.scaler}')
             self.numerical_features = self.DataManager.numerical_features
 
             if "fract" not in dt:
@@ -293,6 +382,11 @@ class Pipeline(object):
         feature_names = self.feature_names
 
         explainer = ExtractSHAPExplainer(model=model, feature_names=feature_names)
+        if self.scaler is not None:
+                print("SCALER FOUND") 
+        else:
+            raise ValueError("No Scaler")
+
         explainer.explain(
             sample_idx = sample_idx,
             sequences=self.test_sequences,  
@@ -302,7 +396,8 @@ class Pipeline(object):
             feature_idx=feature_idx,
             feature_to_explain=feature_to_explain,
             scaler=self.scaler,
-            batch_size=10  
+            batch_size=10,
+            dataset_type = self.parameters['dataset_type'] 
         )
 
     def memorize(self, file_path="parameters_results.csv"):

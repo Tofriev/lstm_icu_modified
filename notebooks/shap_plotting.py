@@ -6,12 +6,15 @@ import matplotlib.pyplot as plt
 from classes.explainer import LoadSHAPExplainer
 
 # --- Load saved SHAP values and test data ---
-model_name = "lstm_static"  
-num_samples = 1000         
+#model_name = "lstm_static"  
+model_name = 'multi_channel_lstm_static'
+num_samples = 1000      
+dataset_name = 'mimic_tudd' 
+#dataset_name = 'tudd_tudd'
 
 
 explainer = LoadSHAPExplainer(model=None, feature_names=None)
-explainer.load_shap_values(model_name, num_samples)
+explainer.load_shap_values(model_name, num_samples)#, dataset_name)
 
 # --- Define thresholds ---
 high_threshold = 0.8
@@ -80,7 +83,7 @@ print("Uncertain:", selected_uncertain_actual_non_surv)
 
 
 # 0: mps | 1: gcs | 6: wbc | 7: platelets | 5: hr 
-feature_idx = 1
+feature_idx = 0
 feature_to_explain = explainer.feature_names[feature_idx] if explainer.feature_names is not None else f"Feature {feature_idx}"
 
 for sample_idx in selected_indices:

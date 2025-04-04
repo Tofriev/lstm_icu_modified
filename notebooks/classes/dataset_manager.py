@@ -28,6 +28,19 @@ class DatasetManager:
         self.data = {}
         random.seed(42)
 
+    def load_all_mimic_and_tudd_data(self):
+        # --- Load and preprocess MIMIC data ---
+        self.data["mimic"] = {}
+        self.load_mimic()
+        # if self.parameters.get("small_data", False):
+        #     self.reduce_data()
+        self.preprocess("mimic")
+        
+        # --- Load and preprocess TUDD data ---
+        self.data["tudd"] = {}
+        self.load_tudd()
+        self.preprocess("tudd")
+
     def load_data(self):
         if "mimic" in self.dataset_type or "combined" in self.dataset_type:
             #print("Loading MIMIC data...")
@@ -176,12 +189,16 @@ class DatasetManager:
         feature_index_mapping = {}
 
         if data_type == "mimic":
-            preprocessor_mimic = Preprocessor(
-                data_type,
-                self.data["mimic"],
-                self.variables,
-                self.parameters,
-            )
+            preprocessor_args = {
+                "data_type": data_type,
+                "data": self.data["mimic"],
+                "variables": self.variables,
+                "parameters": self.parameters,
+            }
+            if hasattr(self, "scaler"):
+                preprocessor_args["scaler"] = self.scaler
+                print("used tudd scaler")
+            preprocessor_mimic = Preprocessor(**preprocessor_args)
             preprocessor_mimic.process()
             # has the attributes: data_process (dict with:
             # pre_processing, aggregated, merged, imputed, scaled, sequences,
@@ -193,7 +210,7 @@ class DatasetManager:
             self.numerical_features = preprocessor_mimic.NUMERICAL_FEATURES
 
             self.scaler = preprocessor_mimic.scaler
-
+            print('saved mimic scaler')
         if "tudd" in self.data:
             preprocessor_args = {
                 "data_type": data_type,
@@ -205,6 +222,8 @@ class DatasetManager:
             # include mimic scaler if it exists
             if hasattr(self, "scaler"):
                 preprocessor_args["scaler"] = self.scaler
+                print("used mimic scaler")
+
 
             preprocessor_tudd = Preprocessor(**preprocessor_args)
 
@@ -213,6 +232,7 @@ class DatasetManager:
             self.feature_names = preprocessor_tudd.ALL_FEATURES
             self.numerical_features = preprocessor_tudd.NUMERICAL_FEATURES
             self.scaler = preprocessor_tudd.scaler
+            print('saved tudd scaler')
 
     def load_mimic(self):
         #print("Loading MIMIC data...")

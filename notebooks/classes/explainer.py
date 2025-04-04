@@ -273,7 +273,7 @@ class ExtractSHAPExplainer(SHAPExplainerBase):
 
         self.shap_values = aggregated_shap_values
 
-    def save_shap_values(self, model_name, num_samples, shap_dir="SHAP_scores"):
+    def save_shap_values(self, model_name,dataset_type, num_samples, shap_dir="SHAP_scores"):
         """
         Save the SHAP values, test data, predictions, and metadata (feature names and scaler parameters)
         to a JSON file.
@@ -283,7 +283,7 @@ class ExtractSHAPExplainer(SHAPExplainerBase):
             raise ValueError("No SHAP values to save. Run extract_shap_values() first.")
         
         os.makedirs(shap_dir, exist_ok=True)
-        json_filename = f"{model_name}_{num_samples}.json"
+        json_filename = f"{model_name}_{dataset_type}_{num_samples}.json"
         json_full_path = os.path.join(shap_dir, json_filename)
         
         predictions = []
@@ -342,7 +342,7 @@ class ExtractSHAPExplainer(SHAPExplainerBase):
 
 
 
-    def explain(self,sequences, model_name, num_samples=1000, batch_size=10, save_shap=True, method="plot_single_feature_time_shap",scaler=None, **kwargs):
+    def explain(self,sequences, model_name,num_samples=1000, batch_size=10, save_shap=True, method="plot_single_feature_time_shap",scaler=None,dataset_type=None, **kwargs):
         """
         Main method: extract new SHAP values from the given sequences, save them if desired,
         and then run a plotting method.
@@ -350,7 +350,7 @@ class ExtractSHAPExplainer(SHAPExplainerBase):
         self.scaler=scaler
         self.extract_shap_values(sequences, num_samples, batch_size)
         if save_shap:
-            self.save_shap_values(model_name, num_samples)
+            self.save_shap_values(model_name, num_samples, dataset_type)
         if method == "plot_shap_heatmap_mean_abs":
             self.plot_shap_heatmap_mean_abs()
         elif method == "plot_single_feature_time_shap":
@@ -364,13 +364,13 @@ class ExtractSHAPExplainer(SHAPExplainerBase):
 # Child class that loads existing SHAP values and test data from file.
 ###############################################################################
 class LoadSHAPExplainer(SHAPExplainerBase):
-    def load_shap_values(self, model_name, num_samples, shap_dir="SHAP_scores"):
+    def load_shap_values(self, model_name, num_samples, dataset_name=None, shap_dir="SHAP_scores"):
         """
         Load the SHAP values, test data, predictions, and metadata (including feature names and scaler parameters)
         from a JSON file.
         """
         import os, json
-        filename = f"{model_name}_{num_samples}.json"
+        filename = f"{model_name}_{dataset_name}_{num_samples}.json" if dataset_name is not None else f"{model_name}_{num_samples}.json"
         full_path = os.path.join(shap_dir, filename)
         if not os.path.exists(full_path):
             raise FileNotFoundError(f"File not found: {full_path}")

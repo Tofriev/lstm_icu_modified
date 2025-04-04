@@ -15,11 +15,11 @@ n_seq, n_static = count_sequential_and_static_features(variables)
 # model parameters work also for tudd
 parameters = {
     "target": "mortality",
-   "dataset_type": "mimic_mimic",
-   #  "dataset_type": "tudd_tudd",
+   #"dataset_type": "mimic_mimic",
+   # "dataset_type": "tudd_tudd",
     # "dataset_type": ["mimic_mimic", "mimic_tudd"],
-    # "dataset_type": "tudd_mimic",
-    # "dataset_type": "mimic_tudd",
+     "dataset_type": "tudd_mimic",
+    #"dataset_type": "mimic_tudd",
     # "dataset_type": [
     #    # "mimic_combined",
     #     #"tudd_combined",
@@ -150,6 +150,8 @@ parameters = {
     },
 }
 
+# pipe = Pipeline(variables=variables, parameters=parameters, new_data=False)
+# pipe.make_pkl_datasets()
 
 if isinstance(parameters["dataset_type"], list) and len(parameters["dataset_type"]) > 1:
     ############################# Mutli Run ##################################################
@@ -164,15 +166,15 @@ if isinstance(parameters["dataset_type"], list) and len(parameters["dataset_type
 else:
     ############################# Single Run #################################################
     print("Single Run")
-    pipe = Pipeline(variables=variables, parameters=parameters, new_data=False)
+    pipe = Pipeline(variables=variables, parameters=parameters, new_data=True)
     pipe.run_experiment()
     # pipe.memorize()
-    #pipe.explain(model_name="lstm_static", method="heatmap_SHAP", num_samples=10)
-    pipe.explain(model_name="lstm_static", feature_to_explain = 'mbp_value', method="plot_single_feature_time_shap", num_samples=1000, feature_type='sequential', feature_idx=0, sample_idx=1)
+    pipe.explain(model_name="lstm_static", method="plot_shap_heatmap_mean_abs", num_samples=10)
+   # pipe.explain(model_name="multi_channel_lstm_static", feature_to_explain = 'mbp_value', method="plot_single_feature_time_shap", num_samples=10, feature_type='sequential', feature_idx=0, sample_idx=1)
     # ['mbp_value', 'gcs_total_value', 'glc_value', 'creatinine_value', 'potassium_value', 'hr_value', 'wbc_value', 'platelets_value', 'inr_value', 'anion_gap_value', 'lactate_value', 'temperature_value', 'weight_value', 
     #['age_value', 'gender_value']
 
-# print(pipe.result_dict)
+print(pipe.result_dict)
 
 # # %%
 # multi_pipe = MultiDatasetPipeline(
@@ -220,5 +222,6 @@ else:
 
 
 # # %%
+
 
 # %%

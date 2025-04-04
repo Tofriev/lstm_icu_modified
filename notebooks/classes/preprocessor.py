@@ -30,6 +30,7 @@ class Preprocessor:
             "pre_processing": data
         }
         self.variables = variables
+        print(f'self.variables ind prepro: {self.variables}')
         self.parameters = parameters
         self.scaler = scaler
         self.aggregation_freq = self.parameters.get("aggregation_frequency", "H")
@@ -355,28 +356,29 @@ class Preprocessor:
         if self.parameters["scaling"] == "Standard":
             #print("scaling with StandardScaler...")
             if self.scaler:  # if scaler was given to init, use it
-                print("using preasigned scaler")
+                print("using preassigned scaler")
             else:
                 self.scaler = StandardScaler()
+                print('make new scaler')
             df[self.NUMERICAL_FEATURES] = self.scaler.fit_transform(
                 df[self.NUMERICAL_FEATURES]
             )
 
-        elif self.parameters["scaling"] == "MinMax":
-            #print("scaling with MinMaxScaler...")
-            if self.scaler:
-                print("using preasigned scaler")
-            else:
-                scaler = MinMaxScaler(
-                    feature_range=(
-                        self.parameters["scaling_range"][0],
-                        self.parameters["scaling_range"][1],
-                    )
-                )
-            df[self.NUMERICAL_FEATURES] = self.scaler.fit_transform(
-                df[self.NUMERICAL_FEATURES]
-            )
-            self.MIMIC_NUMERICAL_FEATURES = self.NUMERICAL_FEATURES
+        # elif self.parameters["scaling"] == "MinMax":
+        #     #print("scaling with MinMaxScaler...")
+        #     if self.scaler:
+        #         print("using preasigned scaler")
+        #     else:
+        #         scaler = MinMaxScaler(
+        #             feature_range=(
+        #                 self.parameters["scaling_range"][0],
+        #                 self.parameters["scaling_range"][1],
+        #             )
+        #         )
+        #     df[self.NUMERICAL_FEATURES] = self.scaler.fit_transform(
+        #         df[self.NUMERICAL_FEATURES]
+        #     )
+        #     self.MIMIC_NUMERICAL_FEATURES = self.NUMERICAL_FEATURES
 
         self.data_process["scaled"] = df
         # print(f'scaled: {self.data_process["scaled"].head(40)}')
@@ -740,11 +742,13 @@ class Preprocessor:
                 )
             else:
                 print("using tudd scaler")
-                scaler = StandardScaler()
+                tudd_scaler = StandardScaler()
                 # print(f"scaling:{self.NUMERICAL_FEATURES}")
-                merged_df[self.NUMERICAL_FEATURES] = scaler.fit_transform(
+                merged_df[self.NUMERICAL_FEATURES] = tudd_scaler.fit_transform(
                     merged_df[self.NUMERICAL_FEATURES]
                 )
+                self.scaler = tudd_scaler
+
 
 
         sequences = []
