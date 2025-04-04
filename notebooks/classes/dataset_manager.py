@@ -42,7 +42,7 @@ class DatasetManager:
         self.preprocess("tudd")
 
     def load_data(self):
-        if "mimic" in self.dataset_type or "combined" in self.dataset_type:
+        if self.dataset_type in ['mimic_mimic', 'mimic_tudd'] or "combined" in self.dataset_type:
             #print("Loading MIMIC data...")
             self.data["mimic"] = {}
             self.load_mimic()
@@ -52,8 +52,12 @@ class DatasetManager:
             # print(
             #     f"MIMIC - Training sequences: {len(self.data['mimic']['sequences_train'])}, Test sequences: {len(self.data['mimic']['sequences_test'])}"
             # )
+            if 'tudd' in self.dataset_type:
+                self.data["tudd"] = {}
+                self.load_tudd()
+                self.preprocess("tudd")
 
-        if "tudd" in self.dataset_type or "combined" in self.dataset_type:
+        elif self.dataset_type in ['tudd_mimic', 'tudd_tudd']:
             #print("Loading TUDD data...")
             self.data["tudd"] = {}
             self.load_tudd()
@@ -62,6 +66,12 @@ class DatasetManager:
             # print(
             #     f"TUDD - Training sequences: {len(self.data['tudd']['sequences_train'])}, Test sequences: {len(self.data['tudd']['sequences_test'])}"
             # )
+            if 'mimic' in self.dataset_type:
+                self.data["mimic"] = {}
+                self.load_mimic()
+                if self.parameters.get("small_data", False):
+                    self.reduce_data()
+                self.preprocess("mimic")
 
         if "combined" in self.dataset_type:
             #print("Creating combined splits...")
@@ -211,7 +221,7 @@ class DatasetManager:
 
             self.scaler = preprocessor_mimic.scaler
             print('saved mimic scaler')
-        if "tudd" in self.data:
+        elif "tudd" in self.data:
             preprocessor_args = {
                 "data_type": data_type,
                 "data": self.data["tudd"],

@@ -29,8 +29,8 @@ class Preprocessor:
             # sequences_train, sequences_test
             "pre_processing": data
         }
+        #print(self.data_process)
         self.variables = variables
-        print(f'self.variables ind prepro: {self.variables}')
         self.parameters = parameters
         self.scaler = scaler
         self.aggregation_freq = self.parameters.get("aggregation_frequency", "H")
@@ -154,6 +154,7 @@ class Preprocessor:
                 # print(self.data_process['aggregated']['static_data'].head(40))
 
             else:
+                #print(self.data_process["pre_processing"][variable])
                 df = self.data_process["pre_processing"][variable]
                 df["charttime"] = pd.to_datetime(df["charttime"]).dt.floor(
                     self.aggregation_freq
@@ -732,6 +733,7 @@ class Preprocessor:
         if self.imputation["method"] == "ffill_bfill":
             merged_df = self.impute_with_ffill_bfill(merged_df)
         merged_df["exitus"].fillna(0, inplace=True)
+
 
         if self.parameters["scaling"] == "Standard":
             print("scaling....")
