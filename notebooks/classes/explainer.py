@@ -9,6 +9,7 @@ import torch.nn.functional as F
 import pandas as pd
 import seaborn as sns
 import shap
+import matplotlib.gridspec as gridspec
 
 ###############################################################################
 # Base class with common functionality
@@ -53,143 +54,102 @@ class SHAPExplainerBase:
     # PLOTTING FUNCTIONS (using only class 1 i.e. "Non Survival")
     ############################################################################
     def plot_shap_heatmap_mean_abs(self):
-        """
-        Plot mean(|SHAP|) across time steps and features for Non Survival (class=1).
-        """
         if self.shap_values is None:
-            raise ValueError("SHAP values have not been set. Run extraction or load from file first.")
+            raise ValueError("SHAP values not set.")
 
-        shap_seq = self.shap_values[1][0]    # sequential branch
-        shap_static = self.shap_values[1][1]   # static branch
-        ts_length = self.test_seq_data_np.shape[1]
-        shap_static_repl = self.replicate_static(shap_static, ts_length)
-        shap_combined = np.concatenate([shap_seq, shap_static_repl], axis=2)
-        
-        shap_abs = np.abs(shap_combined)
-        mean_abs = shap_abs.mean(axis=0)  # shape: (time_steps, total_features)
-        overall_mean = mean_abs.mean(axis=0)  # shape: (total_features,)
-        sorted_indices = np.argsort(overall_mean)[::-1]
-        sorted_feature_names = [self.feature_names[i] for i in sorted_indices]
-        sorted_mean_abs = mean_abs[:, sorted_indices].T  # shape: (total_features, time_steps)
+        shap_seq = self.shap_values[1][0]    # (batch, time, #dynamic)
+        shap_static = self.shap_values[1][1] # (batch, #static)
+        time_steps = self.test_seq_data_np.shape[1]
 
-        time_steps = sorted_mean_abs.shape[1]
-        df = pd.DataFrame(
-            sorted_mean_abs,
-            index=sorted_feature_names,
-            columns=[f"Time {i}" for i in range(time_steps)]
+        static_feat_names = ["age_value", "gender_value"]  # or as appropriate
+        n_dynamic = shap_seq.shape[2]
+        n_static  = shap_static.shape[1]
+
+        mean_abs_seq    = np.abs(shap_seq).mean(axis=0)  # (time, n_dynamic)
+        mean_abs_static = np.abs(shap_static).mean(axis=0)  # (n_static,)
+
+        mean_abs_static_corrected = mean_abs_static / time_steps
+
+        dyn_importance = mean_abs_seq.mean(axis=0)
+        stat_importance = mean_abs_static_corrected
+
+        all_feat_names = self.feature_names
+        overall_importances = np.concatenate([dyn_importance, stat_importance])
+        sorted_indices = np.argsort(overall_importances)[::-1]
+
+        dyn_sorted = [i for i in sorted_indices if i < n_dynamic]
+        stat_sorted = [i for i in sorted_indices if i >= n_dynamic]
+
+        mean_abs_seq_sorted = mean_abs_seq[:, dyn_sorted].T
+        dyn_feat_names_sorted = [all_feat_names[i] for i in dyn_sorted]
+        dyn_df = pd.DataFrame(
+            mean_abs_seq_sorted,
+            index=dyn_feat_names_sorted,
+            columns=[f"Time {t}" for t in range(time_steps)]
+        ).clip(lower=1e-6)
+
+        repeated_static = []
+        stat_feat_names_sorted = [all_feat_names[i] for i in stat_sorted]
+        for idx in stat_sorted:
+            corrected_val = mean_abs_static_corrected[idx - n_dynamic]
+            repeated_static.append(np.repeat(corrected_val, time_steps))
+        stat_arr_sorted = np.vstack(repeated_static)
+        stat_df = pd.DataFrame(
+            stat_arr_sorted,
+            index=stat_feat_names_sorted,
+            columns=[f"Time {t}" for t in range(time_steps)]
+        ).clip(lower=1e-6)
+
+
+        nrows_dyn = dyn_df.shape[0]
+        nrows_stat = stat_df.shape[0]
+
+        fig = plt.figure(figsize=(10, 0.7*(nrows_dyn + nrows_stat)))
+        gs = gridspec.GridSpec(
+            nrows=2, ncols=2,
+            width_ratios=[30, 1],  # left column  heatmaps, right column  colorbar
+            height_ratios=[nrows_dyn * 1.5, nrows_stat],  
+            hspace=0.4, wspace=0.05
         )
-        df_clipped = df.clip(lower=1e-6)
 
-        plt.figure(figsize=(10, 8))
-        sns.heatmap(
-            df_clipped,
-            cmap="Reds",
-            annot=False,
-            fmt=".2f",
-            cbar_kws={"label": "Mean Absolute SHAP Score (Log Scale)"},
-            norm=LogNorm(vmin=df_clipped.min().min(), vmax=df_clipped.max().max()),
-        )
-        plt.title("SHAP Heatmap (Mean Absolute SHAP) [Non Survival] [Log Scale]")
-        plt.xlabel("Time Steps")
-        plt.ylabel("Features (Sorted by Overall Importance)")
-        plt.tight_layout()
+        ax_top    = fig.add_subplot(gs[0, 0])
+        ax_bottom = fig.add_subplot(gs[1, 0])
+        ax_cbar   = fig.add_subplot(gs[:, 1])  # colorbar spans both rows
+
+        vmin = min(dyn_df.values.min(), stat_df.values.min())
+        vmax = max(dyn_df.values.max(), stat_df.values.max())
+        norm = LogNorm(vmin=vmin, vmax=vmax)
+
+        sns.heatmap(dyn_df, ax=ax_top,
+                    cmap="Reds", norm=norm,
+                    cbar=False,
+                    xticklabels=True, yticklabels=True)
+
+        ax_top.set_title("Mean Absolute SHAP Score")
+        ax_top.set_xlabel("Time Steps")
+        ax_top.set_ylabel("Sequential", labelpad=10)
+
+        sns.heatmap(stat_df, ax=ax_bottom,
+                    cmap="Reds", norm=norm,
+                    cbar=False,
+                    xticklabels=False, yticklabels=True)
+
+        ax_bottom.set_title("")
+        ax_bottom.set_xlabel("")
+        ax_bottom.set_ylabel("Static", labelpad=30)
+
+
+        sm = plt.cm.ScalarMappable(cmap="Reds", norm=norm)
+        sm.set_array([])
+        cbar = fig.colorbar(sm, cax=ax_cbar, orientation="vertical")
+        cbar.set_label("Mean Absolute SHAP (Log Scale)")
+
         plt.show()
 
-    def plot_single_feature_time_shap(self, sample_idx, feature_to_explain, input_type='sequential', feature_idx=None):
-        """
-        Plot a single feature's values over time together with the corresponding Non-Survival SHAP values.
-        Also annotate the plot with predicted and actual class.
-        Uses saved predictions (if available) for the annotation.
-        """
-        if self.shap_values is None:
-            raise ValueError("SHAP values have not been set. Run extraction or load from file first.")
-        
 
-        if input_type == 'sequential':
-            branch_idx = 0
-            data_array = self.test_seq_data_np
-            ts_length = data_array.shape[1]
-            raw_values = data_array[sample_idx, :, feature_idx]
-        elif input_type == 'static':
-            branch_idx = 1
-            data_array = self.test_static_data_np
-            ts_length = self.test_seq_data_np.shape[1]
-            raw_value = data_array[sample_idx, feature_idx]
-            raw_values = np.repeat(raw_value, ts_length)
-        else:
-            raise ValueError("input_type must be either 'sequential' or 'static'.")
 
-        # Apply descaling if scaler is provided.
-        if self.scaler is not None:
-            # Works for both a fitted scaler object or a dummy scaler loaded from JSON.
-            try:
-                feature_scale = self.scaler.scale_[feature_idx]
-                feature_mean = self.scaler.mean_[feature_idx]
-                feature_values = raw_values * feature_scale + feature_mean
-            except Exception as e:
-                print("Error in descaling:", e)
-                feature_values = raw_values
-        else:
-            raise ValueError('No Scaler found.')
 
-        time_steps = np.arange(ts_length)
-        fig, ax1 = plt.subplots(figsize=(10, 5))
-        ax1.set_xlabel("Time Step")
-        ax1.set_ylabel("Feature Value")
-        ax1.plot(time_steps, feature_values, color="black", linewidth=2.5, label="Feature Value")
-        ax1.tick_params(axis="y", labelcolor="black")
 
-        shap_vals = self.shap_values[1][branch_idx]
-        if input_type == 'sequential':
-            shap_vals_non_surv = shap_vals[sample_idx, :, feature_idx]
-        else:
-            shap_val_single = shap_vals[sample_idx, feature_idx]
-            shap_vals_non_surv = np.repeat(shap_val_single, ts_length)
-
-        ax2 = ax1.twinx()
-        ax2.set_ylabel("SHAP Value [Non-Survival]")
-        ax2.plot(time_steps, shap_vals_non_surv, color="red", linestyle="--", linewidth=1.5,
-                alpha=0.6, label="SHAP (Non Survival)")
-        min_val = np.min(shap_vals_non_surv)
-        max_val = np.max(shap_vals_non_surv)
-        margin = 0.1 * (max_val - min_val) if (max_val - min_val) != 0 else 0.1
-        ax2.set_ylim(min_val - margin, max_val + margin)
-        ax2.tick_params(axis="y", labelcolor="red")
-
-        plt.title(f"Feature: {feature_to_explain} (Sample {sample_idx})")
-        lines1, labels1 = ax1.get_legend_handles_labels()
-        lines2, labels2 = ax2.get_legend_handles_labels()
-        ax2.legend(lines1 + lines2, labels1 + labels2, loc="upper right")
-
-        plt.subplots_adjust(bottom=0.25)
-        ax_annot = fig.add_axes([0.1, 0.05, 0.8, 0.1])  # [left, bottom, width, height] in figure coords
-        ax_annot.axis("off")
-
-        actual_label_val = self.test_labels_np[sample_idx]
-        actual_label_str = "Survival" if actual_label_val == 0 else "Non Survival"
-
-        if hasattr(self, "predictions") and (self.predictions is not None):
-            pred = self.predictions[sample_idx]
-            p_surv = pred["p_surv"]
-            p_non_surv = pred["p_non_surv"]
-            if p_surv >= p_non_surv:
-                predicted_class_str = "Survival"
-                predicted_prob = p_surv
-            else:
-                predicted_class_str = "Non Survival"
-                predicted_prob = p_non_surv
-        else:
-            predicted_class_str = "N/A"
-            predicted_prob = 0.0
-
-        text_str = (
-            f"Predicted: {predicted_class_str} (P={predicted_prob:.2f})\n"
-            f"Actual: {actual_label_str}"
-        )
-        ax_annot.text(0.5, 0.5, text_str,
-                    ha='center', va='center', fontsize=10,
-                    bbox=dict(facecolor='white', alpha=0.8, boxstyle='round,pad=0.5'))
-        plt.show()
 
 
 

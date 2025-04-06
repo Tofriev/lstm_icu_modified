@@ -820,7 +820,7 @@ class Preprocessor:
         if self.parameters["scaling"] == "Standard":
             print("scaling....")
             if hasattr(self, "scaler") and self.scaler is not None:
-                print('using preassignes scaler')
+                print('using preassigned scaler')
                 scaler = self.scaler
                 train_df[self.NUMERICAL_FEATURES] = scaler.transform(train_df[self.NUMERICAL_FEATURES]) # train not really needed in this case but we do it for sake of completeness
                 test_df[self.NUMERICAL_FEATURES] = scaler.transform(test_df[self.NUMERICAL_FEATURES])
