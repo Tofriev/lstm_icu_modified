@@ -6,15 +6,15 @@ import matplotlib.pyplot as plt
 from classes.explainer import LoadSHAPExplainer
 
 # --- Load saved SHAP values and test data ---
-#model_name = "lstm_static"  
-model_name = 'multi_channel_lstm_static'
-num_samples = 1000      
-dataset_name = 'mimic_tudd' 
+model_name = "lstm_static"  
+#model_name = 'multi_channel_lstm_static'
+num_samples = 10      
+dataset_name = 'combined_tudd' 
 #dataset_name = 'tudd_tudd'
 
 
 explainer = LoadSHAPExplainer(model=None, feature_names=None)
-explainer.load_shap_values(model_name, num_samples)#, dataset_name)
+explainer.load_shap_values(model_name, num_samples, dataset_name)
 
 # --- Define thresholds ---
 high_threshold = 0.8
@@ -93,5 +93,7 @@ for sample_idx in selected_indices:
         feature_idx=feature_idx,
         input_type='sequential'
     )
+
+explainer.plot_shap_heatmap_mean_abs()
 
 # %%

@@ -146,7 +146,101 @@ class SHAPExplainerBase:
 
         plt.show()
 
+    def plot_single_feature_time_shap(self, sample_idx, feature_to_explain, input_type='sequential', feature_idx=None):
+        """
+        Plot a single feature's values over time together with the corresponding Non-Survival SHAP values.
+        Also annotate the plot with predicted and actual class.
+        Uses saved predictions (if available) for the annotation.
+        """
+        if self.shap_values is None:
+            raise ValueError("SHAP values have not been set. Run extraction or load from file first.")
+        
 
+        if input_type == 'sequential':
+            branch_idx = 0
+            data_array = self.test_seq_data_np
+            ts_length = data_array.shape[1]
+            raw_values = data_array[sample_idx, :, feature_idx]
+        elif input_type == 'static':
+            branch_idx = 1
+            data_array = self.test_static_data_np
+            ts_length = self.test_seq_data_np.shape[1]
+            raw_value = data_array[sample_idx, feature_idx]
+            raw_values = np.repeat(raw_value, ts_length)
+        else:
+            raise ValueError("input_type must be either 'sequential' or 'static'.")
+
+        # Apply descaling if scaler is provided.
+        if self.scaler is not None:
+            # Works for both a fitted scaler object or a dummy scaler loaded from JSON.
+            try:
+                feature_scale = self.scaler.scale_[feature_idx]
+                feature_mean = self.scaler.mean_[feature_idx]
+                feature_values = raw_values * feature_scale + feature_mean
+            except Exception as e:
+                print("Error in descaling:", e)
+                feature_values = raw_values
+        else:
+            raise ValueError('No Scaler found.')
+
+        time_steps = np.arange(ts_length)
+        fig, ax1 = plt.subplots(figsize=(10, 5))
+        ax1.set_xlabel("Time Step")
+        ax1.set_ylabel("Feature Value")
+        ax1.plot(time_steps, feature_values, color="black", linewidth=2.5, label="Feature Value")
+        ax1.tick_params(axis="y", labelcolor="black")
+
+        shap_vals = self.shap_values[1][branch_idx]
+        if input_type == 'sequential':
+            shap_vals_non_surv = shap_vals[sample_idx, :, feature_idx]
+        else:
+            shap_val_single = shap_vals[sample_idx, feature_idx]
+            shap_vals_non_surv = np.repeat(shap_val_single, ts_length)
+
+        ax2 = ax1.twinx()
+        ax2.set_ylabel("SHAP Value [Non-Survival]")
+        ax2.plot(time_steps, shap_vals_non_surv, color="red", linestyle="--", linewidth=1.5,
+                alpha=0.6, label="SHAP (Non Survival)")
+        min_val = np.min(shap_vals_non_surv)
+        max_val = np.max(shap_vals_non_surv)
+        margin = 0.1 * (max_val - min_val) if (max_val - min_val) != 0 else 0.1
+        ax2.set_ylim(min_val - margin, max_val + margin)
+        ax2.tick_params(axis="y", labelcolor="red")
+
+        plt.title(f"Feature: {feature_to_explain} (Sample {sample_idx})")
+        lines1, labels1 = ax1.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax2.legend(lines1 + lines2, labels1 + labels2, loc="upper right")
+
+        plt.subplots_adjust(bottom=0.25)
+        ax_annot = fig.add_axes([0.1, 0.05, 0.8, 0.1])  # [left, bottom, width, height] in figure coords
+        ax_annot.axis("off")
+
+        actual_label_val = self.test_labels_np[sample_idx]
+        actual_label_str = "Survival" if actual_label_val == 0 else "Non Survival"
+
+        if hasattr(self, "predictions") and (self.predictions is not None):
+            pred = self.predictions[sample_idx]
+            p_surv = pred["p_surv"]
+            p_non_surv = pred["p_non_surv"]
+            if p_surv >= p_non_surv:
+                predicted_class_str = "Survival"
+                predicted_prob = p_surv
+            else:
+                predicted_class_str = "Non Survival"
+                predicted_prob = p_non_surv
+        else:
+            predicted_class_str = "N/A"
+            predicted_prob = 0.0
+
+        text_str = (
+            f"Predicted: {predicted_class_str} (P={predicted_prob:.2f})\n"
+            f"Actual: {actual_label_str}"
+        )
+        ax_annot.text(0.5, 0.5, text_str,
+                    ha='center', va='center', fontsize=10,
+                    bbox=dict(facecolor='white', alpha=0.8, boxstyle='round,pad=0.5'))
+        plt.show()
 
 
 
@@ -243,6 +337,9 @@ class ExtractSHAPExplainer(SHAPExplainerBase):
             raise ValueError("No SHAP values to save. Run extract_shap_values() first.")
         
         os.makedirs(shap_dir, exist_ok=True)
+        print(f'model name: {model_name}')
+        print(f'dataset type: {dataset_type}')
+        print(f'num samples: {num_samples}')
         json_filename = f"{model_name}_{dataset_type}_{num_samples}.json"
         json_full_path = os.path.join(shap_dir, json_filename)
         
@@ -310,7 +407,7 @@ class ExtractSHAPExplainer(SHAPExplainerBase):
         self.scaler=scaler
         self.extract_shap_values(sequences, num_samples, batch_size)
         if save_shap:
-            self.save_shap_values(model_name, num_samples, dataset_type)
+            self.save_shap_values(model_name, dataset_type, num_samples)
         if method == "plot_shap_heatmap_mean_abs":
             self.plot_shap_heatmap_mean_abs()
         elif method == "plot_single_feature_time_shap":
@@ -330,7 +427,7 @@ class LoadSHAPExplainer(SHAPExplainerBase):
         from a JSON file.
         """
         import os, json
-        filename = f"{model_name}_{dataset_name}_{num_samples}.json" if dataset_name is not None else f"{model_name}_{num_samples}.json"
+        filename = f"{model_name}_{dataset_name}_{num_samples}.json" #if dataset_name is not None else f"{model_name}_{num_samples}.json"
         full_path = os.path.join(shap_dir, filename)
         if not os.path.exists(full_path):
             raise FileNotFoundError(f"File not found: {full_path}")
