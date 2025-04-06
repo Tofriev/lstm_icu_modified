@@ -156,7 +156,7 @@ class SHAPExplainerBase:
             raise ValueError("SHAP values have not been set. Run extraction or load from file first.")
         
 
-        if input_type == 'sequential':
+        if input_type == 'Sequential':
             branch_idx = 0
             data_array = self.test_seq_data_np
             ts_length = data_array.shape[1]

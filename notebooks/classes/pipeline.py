@@ -482,40 +482,39 @@ class MultiDatasetPipeline(Pipeline):
             {}
         )  # Will hold preprocessed DatasetManager objects per dataset_type
 
-    def run_all(self, model_list, memorize=False, explain_method=None, num_samples=10):
+    def run_all(self, model_list, memorize=False, explain_method='plot_shap_heatmap_mean_abs', num_samples=1000):
         all_results = {}
+        # Loop over each dataset type.
         for ds in self.dataset_types:
-            # Update parameters for current dataset type.
+            # Update parameters for the current dataset.
             self.parameters["dataset_type"] = ds
-            #print(f"\n=== Running experiments for dataset '{ds}' ===")
-            # Prepare data for this dataset type.
-            self.prepare_data()
             for model in model_list:
+                # Update model list for the current experiment.
                 self.parameters["models"] = [model]
-                #print(f"\n--- Training with model '{model}' on dataset '{ds}' ---")
-                self.train()
+                print(f"\n=== Running experiment for dataset '{ds}' with model '{model}' ===")
+                # Run the complete experiment (this will prepare data, train the model, and save results).
+                self.run_experiment()
+                # Prepare the result dictionary for this combination.
+                combination_key = f"{ds}_{model}"
+                combination_result = {
+                    "result_dict": self.result_dict
+                }
+                # If an explanation method is provided, run explain and store the returned SHAP scores.
                 if explain_method:
-                    self.explain(
-                        model_name=model, method=explain_method, num_samples=num_samples
-                    )
+                    # It is assumed that the explain() method has been modified to return the SHAP scores.
+                    shap_scores = self.explain(model_name=model, method=explain_method, num_samples=num_samples)
+                    combination_result["shap_scores"] = shap_scores
+                # Optionally memorize the parameters and results.
                 if memorize:
                     self.memorize()
-                all_results[f"{ds}"] = {
-                    "result_dict": self.result_dict,
-                    # "trained_model": self.trained_models,
-                }
-                print("Result:", self.result_dict)
-                # print("Trained Models:", self.trained_models)
-        print("\n=== All Results ===")
-        for key, value in all_results.items():
-            print(f"{key}: {value}")
-       # Generate model name part for filename
+                # Save the result for the current combination.
+                all_results[combination_key] = combination_result
+                print("Result for", combination_key, ":", combination_result["result_dict"])
+        # Generate model name part for the output filename.
         model_part = "_".join(model_list)
         filename = f"results_multiple_{model_part}.json"
         self.results_path = os.path.join(project_root, filename)
-
-        # Save the results
+        # Save the complete results to file.
         with open(self.results_path, "w") as f:
             json.dump(all_results, f, indent=4)
-
         return all_results
