@@ -44,7 +44,7 @@ class DatasetManager:
         self.preprocess("tudd")
 
     def load_data(self):
-        if self.dataset_type in ['mimic_mimic', 'mimic_tudd', 'mimic_combined', 'combined_mimic', 'combined_combined']:
+        if self.dataset_type in ['mimic_mimic', 'mimic_tudd', 'mimic_combined', 'combined_mimic', 'combined_combined', 'mimic_tudd_fract', 'mimic_mimic_fract']:
             #print("Loading MIMIC data...")
             self.data["mimic"] = {}
             self.load_mimic()

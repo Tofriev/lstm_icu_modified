@@ -344,7 +344,7 @@ class Pipeline(object):
         plt.xlabel("Number of Training Samples")
         plt.ylabel("AUROC")
         plt.title("Model Performance vs. Number of Training Samples")
-
+        plt.ylim(0.6, 0.9)
         if len(models) > 1:
             plt.legend(title="Models")
 
@@ -366,16 +366,24 @@ class Pipeline(object):
             self.train_fractional_experiments()
             self.visualize_fraction_results()
 
+            model_names = "_".join(self.parameters["models"])
+            filename = f"results_{dt}_{model_names}.json"
+            self.results_path = os.path.join(project_root, filename)
+
+            # Save results
             with open(self.results_path, "w") as f:
-                json.dump(self.fraction_results, f, indent=4)
-            #print(f"Fraction experiment results saved to {self.results_path}")
+                json.dump(self.fraction_results if "fract" in dt else self.result_dict, f, indent=4)
 
         else:
             # NORMAL TRAINING
             self.train()
+            model_names = "_".join(self.parameters["models"])
+            filename = f"results_{dt}_{model_names}.json"
+            self.results_path = os.path.join(project_root, filename)
+
+            # Save results
             with open(self.results_path, "w") as f:
-                json.dump(self.result_dict, f, indent=4)
-            #print(f"Results saved to {self.results_path}")
+                json.dump(self.fraction_results if "fract" in dt else self.result_dict, f, indent=4)
 
     def explain(self, model_name, method, num_samples=1000, feature_to_explain=None, feature_type=None, feature_idx=None, sample_idx=None):
         model = self.trained_models[model_name]
@@ -501,9 +509,13 @@ class MultiDatasetPipeline(Pipeline):
         print("\n=== All Results ===")
         for key, value in all_results.items():
             print(f"{key}: {value}")
+       # Generate model name part for filename
+        model_part = "_".join(model_list)
+        filename = f"results_multiple_{model_part}.json"
+        self.results_path = os.path.join(project_root, filename)
 
-        self.results_path = os.path.join(project_root, "results.json")
+        # Save the results
         with open(self.results_path, "w") as f:
             json.dump(all_results, f, indent=4)
-        #print(f"All results saved to {self.results_path}")
+
         return all_results
