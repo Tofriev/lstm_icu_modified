@@ -122,10 +122,10 @@ class Preprocessor:
        # print("MIMIC missing values statistics:")
         # self.print_missing_stats(self.data_process["merged"])
         self.impute()
-        self.scale_normalize()
-        self.create_sequences()
-        self.split_train_test_sequences()
-
+        # self.scale_normalize()
+        # self.create_sequences()
+        # self.split_train_test_sequences()
+        self.scale_split_and_create_sequences()
     def variable_conversion_and_aggregation(self):
         """
         converts vars in the static data and aggregate all data on specified time frequency
@@ -481,6 +481,74 @@ class Preprocessor:
 
     #     self.sequence_dict["fractional_mimic_tudd"] = fractional_datasets
 
+    def scale_split_and_create_sequences(self):
+        """
+        Splits the imputed MIMIC data by unique stay_id, fits a scaler on the training set,
+        transforms the test set, and then creates sequences for each set.
+        """
+        df = self.data_process["imputed"].copy()
+        target_col = f'{self.parameters["target"]}_value'
+        
+        labels_by_id = df.groupby("stay_id")[target_col].first()
+        train_ids, test_ids = train_test_split(
+            labels_by_id.index,
+            test_size=0.2,
+            stratify=labels_by_id.values,
+            random_state=42
+        )
+        
+        train_df = df[df["stay_id"].isin(train_ids)].copy()
+        test_df = df[df["stay_id"].isin(test_ids)].copy()
+        
+        if self.parameters["scaling"] == "Standard":
+            print("Scaling training and test sets (MIMIC) using StandardScaler...")
+            if self.scaler:  # use a preassigned scaler if available
+                print('use preassigned scaler')
+                scaler = self.scaler
+                train_df[self.NUMERICAL_FEATURES] = scaler.transform(train_df[self.NUMERICAL_FEATURES])
+                test_df[self.NUMERICAL_FEATURES] = scaler.transform(test_df[self.NUMERICAL_FEATURES])
+            else:
+                print('make new scaler')
+                scaler = StandardScaler()
+                self.scaler = scaler
+                train_df[self.NUMERICAL_FEATURES] = scaler.fit_transform(train_df[self.NUMERICAL_FEATURES])
+                test_df[self.NUMERICAL_FEATURES] = scaler.transform(test_df[self.NUMERICAL_FEATURES])
+        
+        self.data_process["scaled_train"] = train_df
+        self.data_process["scaled_test"] = test_df
+
+        sequences_train = []
+        sequences_test = []
+        
+        seq_feature_names = [f"{var}_value" for var in self.variables if var != "static_data"]
+        exclude_static = {"mortality", "intime", "first_day_end", "stay_id"}
+        static_feature_names = [
+            f"{key}_value"
+            for key, attr in self.variables["static_data"].items()
+            if key not in exclude_static and attr.get("training", False)
+        ]
+        
+        for stay_id, group in train_df.groupby("stay_id"):
+            group = group.sort_values("charttime")
+            static_features = group.iloc[0][static_feature_names].values.astype(np.float32)
+            sequential_features = group[seq_feature_names].values.astype(np.float32)
+            label = group[target_col].iloc[0]
+            sequences_train.append((sequential_features, static_features, label))
+        
+        for stay_id, group in test_df.groupby("stay_id"):
+            group = group.sort_values("charttime")
+            static_features = group.iloc[0][static_feature_names].values.astype(np.float32)
+            sequential_features = group[seq_feature_names].values.astype(np.float32)
+            label = group[target_col].iloc[0]
+            sequences_test.append((sequential_features, static_features, label))
+        
+        self.feature_index_mapping_sequences = {
+            "sequential": {idx: feature for idx, feature in enumerate(seq_feature_names)},
+            "static": {idx: feature for idx, feature in enumerate(static_feature_names)}
+        }
+        self.data_process["sequences_train"] = sequences_train
+        self.data_process["sequences_test"] = sequences_test
+
     # TODO: put this in a separate class or one of the others
     def plot_density(self, mimic_df, tudd_df, features):
 
@@ -734,26 +802,37 @@ class Preprocessor:
             merged_df = self.impute_with_ffill_bfill(merged_df)
         merged_df["exitus"].fillna(0, inplace=True)
 
+        # Split by stay_id
+        labels_by_id = merged_df.groupby("stay_id")["exitus"].first()
+        train_ids, test_ids = train_test_split(
+            labels_by_id.index, 
+            test_size=0.2, 
+            stratify=labels_by_id.values, 
+            random_state=42
+        )
+
+        train_df = merged_df[merged_df["stay_id"].isin(train_ids)].copy()
+        test_df = merged_df[merged_df["stay_id"].isin(test_ids)].copy()
+
+
 
         if self.parameters["scaling"] == "Standard":
             print("scaling....")
             if hasattr(self, "scaler") and self.scaler is not None:
+                print('using preassignes scaler')
                 scaler = self.scaler
-                merged_df[self.NUMERICAL_FEATURES] = scaler.transform(
-                    merged_df[self.NUMERICAL_FEATURES]
-                )
+                train_df[self.NUMERICAL_FEATURES] = scaler.transform(train_df[self.NUMERICAL_FEATURES]) # train not really needed in this case but we do it for sake of completeness
+                test_df[self.NUMERICAL_FEATURES] = scaler.transform(test_df[self.NUMERICAL_FEATURES])
             else:
-                print("using tudd scaler")
+                print("Scaling on training data only...")
                 tudd_scaler = StandardScaler()
-                # print(f"scaling:{self.NUMERICAL_FEATURES}")
-                merged_df[self.NUMERICAL_FEATURES] = tudd_scaler.fit_transform(
-                    merged_df[self.NUMERICAL_FEATURES]
-                )
+                train_df[self.NUMERICAL_FEATURES] = tudd_scaler.fit_transform(train_df[self.NUMERICAL_FEATURES])
+                test_df[self.NUMERICAL_FEATURES] = tudd_scaler.transform(test_df[self.NUMERICAL_FEATURES])
                 self.scaler = tudd_scaler
 
+        sequences_train = []
+        sequences_test = []
 
-
-        sequences = []
         seq_feature_names = [f"{var}_value" for var in self.variables if var != "static_data"]
         exclude_static = {"mortality", "intime", "first_day_end", "stay_id"}
         static_feature_names = [
@@ -762,22 +841,25 @@ class Preprocessor:
             if key not in exclude_static and attr.get("training", False)
         ]
 
-        for stay_id, group in merged_df.groupby("stay_id"):
+        for stay_id, group in train_df.groupby("stay_id"):
             group = group.sort_values("measurement_time_from_admission")
             static_features = group.iloc[0][static_feature_names].values.astype(np.float32)
             sequential_features = group[seq_feature_names].values.astype(np.float32)
             label = group["exitus"].iloc[0]
-            sequences.append((sequential_features, static_features, label))
+            sequences_train.append((sequential_features, static_features, label))
+
+        for stay_id, group in test_df.groupby("stay_id"):
+            group = group.sort_values("measurement_time_from_admission")
+            static_features = group.iloc[0][static_feature_names].values.astype(np.float32)
+            sequential_features = group[seq_feature_names].values.astype(np.float32)
+            label = group["exitus"].iloc[0]
+            sequences_test.append((sequential_features, static_features, label))
+
         self.feature_index_mapping_sequences = {
             "sequential": {idx: feature for idx, feature in enumerate(seq_feature_names)},
             "static": {idx: feature for idx, feature in enumerate(static_feature_names)}
         }
 
 
-        labels = [seq[2] for seq in sequences]
-        self.data_process["sequences_train"], self.data_process["sequences_test"] = train_test_split(
-            sequences,
-            test_size=0.2,
-            stratify=labels,
-            random_state=42,
-        )
+        self.data_process["sequences_train"] = sequences_train
+        self.data_process["sequences_test"] = sequences_test
