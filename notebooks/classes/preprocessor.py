@@ -801,6 +801,7 @@ class Preprocessor:
         if self.imputation["method"] == "ffill_bfill":
             merged_df = self.impute_with_ffill_bfill(merged_df)
         merged_df["exitus"].fillna(0, inplace=True)
+        self.data_process["imputed"] = merged_df
 
         # Split by stay_id
         labels_by_id = merged_df.groupby("stay_id")["exitus"].first()

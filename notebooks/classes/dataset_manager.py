@@ -5,6 +5,8 @@ from sklearn.model_selection import train_test_split
 from classes.preprocessor import Preprocessor
 from utils import set_seed
 import random
+from sklearn.preprocessing import StandardScaler
+import numpy as np
 
 set_seed(42)
 random.seed(42)
@@ -42,7 +44,7 @@ class DatasetManager:
         self.preprocess("tudd")
 
     def load_data(self):
-        if self.dataset_type in ['mimic_mimic', 'mimic_tudd'] or "combined" in self.dataset_type:
+        if self.dataset_type in ['mimic_mimic', 'mimic_tudd', 'mimic_combined', 'combined_mimic', 'combined_combined']:
             #print("Loading MIMIC data...")
             self.data["mimic"] = {}
             self.load_mimic()
@@ -52,12 +54,12 @@ class DatasetManager:
             # print(
             #     f"MIMIC - Training sequences: {len(self.data['mimic']['sequences_train'])}, Test sequences: {len(self.data['mimic']['sequences_test'])}"
             # )
-            if 'tudd' in self.dataset_type:
+            if 'tudd' or 'combined' in self.dataset_type:
                 self.data["tudd"] = {}
                 self.load_tudd()
                 self.preprocess("tudd")
 
-        elif self.dataset_type in ['tudd_mimic', 'tudd_tudd']:
+        elif self.dataset_type in ['tudd_mimic', 'tudd_tudd']:#,'tudd_combined', 'combined_tudd', 'combined_combined']:
             #print("Loading TUDD data...")
             self.data["tudd"] = {}
             self.load_tudd()
@@ -75,7 +77,8 @@ class DatasetManager:
 
         if "combined" in self.dataset_type:
             #print("Creating combined splits...")
-            self.create_combined_splits_50_50()
+            self.apply_combined_scaling_and_create_sequences()
+            #self.create_combined_splits_50_50()
             # self.create_combined_splits_full()
         if "fract" in self.dataset_type:
             #print("Creating fractional splits...")
@@ -162,8 +165,99 @@ class DatasetManager:
 
         self.data["fractional_indices"] = fractional_indices
 
+    def apply_combined_scaling_and_create_sequences(self):
+        target_col = f'{self.parameters["target"]}_value'
+        
+        mimic_imputed = self.data["mimic"]["imputed"].copy()
+        tudd_imputed = self.data["tudd"]["imputed"].copy()
+        
+        mimic_labels = mimic_imputed.groupby("stay_id")[target_col].first()
+        mimic_train_ids, mimic_test_ids = train_test_split(
+            mimic_labels.index, test_size=0.2, stratify=mimic_labels.values, random_state=42
+        )
+        mimic_train = mimic_imputed[mimic_imputed["stay_id"].isin(mimic_train_ids)].copy()
+        mimic_test = mimic_imputed[mimic_imputed["stay_id"].isin(mimic_test_ids)].copy()
+        
+        tudd_labels = tudd_imputed.groupby("stay_id")['exitus'].first()
+        tudd_train_ids, tudd_test_ids = train_test_split(
+            tudd_labels.index, test_size=0.2, stratify=tudd_labels.values, random_state=42
+        )
+        tudd_train = tudd_imputed[tudd_imputed["stay_id"].isin(tudd_train_ids)].copy()
+        tudd_test = tudd_imputed[tudd_imputed["stay_id"].isin(tudd_test_ids)].copy()
+        
+        combined_train_df = pd.concat([mimic_train, tudd_train], ignore_index=True)
+        
+    
+        if self.dataset_type.startswith("tudd"):
+            scaler = StandardScaler()
+            scaler.fit(tudd_train[self.numerical_features])
+        elif self.dataset_type.startswith("mimic"):
+            scaler = StandardScaler()
+            scaler.fit(mimic_train[self.numerical_features])
+        else:
+            scaler = StandardScaler()
+            scaler.fit(combined_train_df[self.numerical_features])
+        
+        mimic_train[self.numerical_features] = scaler.transform(mimic_train[self.numerical_features])
+        mimic_test[self.numerical_features] = scaler.transform(mimic_test[self.numerical_features])
+        tudd_train[self.numerical_features] = scaler.transform(tudd_train[self.numerical_features])
+        tudd_test[self.numerical_features] = scaler.transform(tudd_test[self.numerical_features])
+        
+        self.scaler = scaler
+        
+
+        seq_feature_names = [f"{var}_value" for var in self.variables if var != "static_data"]
+        exclude_static = {"mortality", "intime", "first_day_end", "stay_id"}
+        static_feature_names = [
+            f"{key}_value" for key, attr in self.variables["static_data"].items() 
+            if key not in exclude_static and attr.get("training", False)
+        ]
+        
+        def build_sequences(df, time_col, target):
+            sequences = []
+            for stay_id, group in df.groupby("stay_id"):
+                group = group.sort_values(time_col)
+                static_features = group.iloc[0][static_feature_names].values.astype(np.float32)
+                sequential_features = group[seq_feature_names].values.astype(np.float32)
+                label = group[target].iloc[0]
+                sequences.append((sequential_features, static_features, label))
+            return sequences
+
+        mimic_sequences_train = build_sequences(mimic_train, "charttime", target_col)
+        mimic_sequences_test = build_sequences(mimic_test, "charttime", target_col)
+        tudd_sequences_train = build_sequences(tudd_train, "measurement_time_from_admission", 'exitus')
+        tudd_sequences_test = build_sequences(tudd_test, "measurement_time_from_admission", 'exitus')
+        
+        n_train = min(len(mimic_sequences_train), len(tudd_sequences_train))
+        mimic_train_sample = self.stratified_sample(mimic_sequences_train, n_train)
+        tudd_train_sample = self.stratified_sample(tudd_sequences_train, n_train)
+        combined_train = mimic_train_sample + tudd_train_sample
+        random.shuffle(combined_train)
+        
+        n_test = min(len(mimic_sequences_test), len(tudd_sequences_test))
+        mimic_test_sample = self.stratified_sample(mimic_sequences_test, n_test)
+        tudd_test_sample = self.stratified_sample(tudd_sequences_test, n_test)
+        combined_test = mimic_test_sample + tudd_test_sample
+        random.shuffle(combined_test)
+        
+        self.data["combined"] = {
+            "sequences_train": combined_train,
+            "sequences_test": combined_test,
+            "scaler": scaler
+        }
+        self.data["mimic"] = {
+            "sequences_train": mimic_sequences_train,
+            "sequences_test": mimic_sequences_test,
+            "scaler": scaler
+        }
+        self.data["tudd"] = {
+            "sequences_train": tudd_sequences_train,
+            "sequences_test": tudd_sequences_test,
+            "scaler": scaler
+        }
+
+
     def create_combined_splits_50_50(self):
-        # --- Create combined training set ---
         mimic_train = self.data["mimic"].get("sequences_train")
         tudd_train = self.data["tudd"].get("sequences_train")
         if mimic_train is None or tudd_train is None:
@@ -176,7 +270,6 @@ class DatasetManager:
         combined_train = mimic_train_sample + tudd_train_sample
         random.shuffle(combined_train)
 
-        # --- Create combined test set ---
         mimic_test = self.data["mimic"].get("sequences_test")
         tudd_test = self.data["tudd"].get("sequences_test")
         if mimic_test is None or tudd_test is None:
