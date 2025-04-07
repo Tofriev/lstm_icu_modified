@@ -44,7 +44,7 @@ class DatasetManager:
         self.preprocess("tudd")
 
     def load_data(self):
-        if self.dataset_type in ['mimic_mimic', 'mimic_tudd', 'mimic_combined', 'combined_mimic','tudd_combined','combined_tudd', 'combined_combined', 'mimic_tudd_fract', 'mimic_mimic_fract']:
+        if self.dataset_type in ['mimic_mimic', 'mimic_tudd', 'mimic_combined', 'combined_mimic','combined_tudd', 'combined_combined', 'mimic_tudd_fract', 'mimic_mimic_fract']:
             #print("Loading MIMIC data...")
             self.data["mimic"] = {}
             self.load_mimic()
@@ -54,13 +54,13 @@ class DatasetManager:
             # print(
             #     f"MIMIC - Training sequences: {len(self.data['mimic']['sequences_train'])}, Test sequences: {len(self.data['mimic']['sequences_test'])}"
             # )
-            if 'tudd' or 'combined' in self.dataset_type:
+            if self.dataset_type in ['mimic_tudd','mimic_combined', 'combined_mimic','combined_tudd', 'combined_combined', 'mimic_tudd_fract']:
                 print('nest tudd')
                 self.data["tudd"] = {}
                 self.load_tudd()
                 self.preprocess("tudd")
 
-        if self.dataset_type in ['tudd_mimic', 'tudd_tudd','tudd_combined', 'combined_tudd', 'combined_combined']:
+        if self.dataset_type in ['tudd_mimic', 'tudd_tudd','tudd_combined']:
             print("Loading TUDD data...")
             self.data["tudd"] = {}
             self.load_tudd()
@@ -69,7 +69,7 @@ class DatasetManager:
             # print(
             #     f"TUDD - Training sequences: {len(self.data['tudd']['sequences_train'])}, Test sequences: {len(self.data['tudd']['sequences_test'])}"
             # )
-            if 'mimic' in self.dataset_type:
+            if self.dataset_type in ['tudd_mimic','tudd_combined']:
                 self.data["mimic"] = {}
                 self.load_mimic()
                 if self.parameters.get("small_data", False):
