@@ -126,6 +126,16 @@ class Preprocessor:
         # self.create_sequences()
         # self.split_train_test_sequences()
         self.scale_split_and_create_sequences()
+
+         # Print correlation matrix
+        # print("Correlation matrix for MIMIC dataset (scaled_train):")
+        # print(self.data_process["scaled_train"])
+        
+        # mimic_corr = self.data_process["scaled_train"][self.NUMERICAL_FEATURES].corr()
+        # plt.figure(figsize=(12, 8))
+        # sns.heatmap(mimic_corr, annot=True, fmt='.2f', cmap='coolwarm')
+        # plt.title("Correlation Matrix - MIMIC")
+        # plt.show()
     def variable_conversion_and_aggregation(self):
         """
         converts vars in the static data and aggregate all data on specified time frequency
@@ -394,7 +404,7 @@ class Preprocessor:
         df = self.data_process["scaled"].copy()
         sequences = []
         
-        # Sequential features: all top-level variables (except "static_data")
+     
         seq_feature_names = [f"{var}_value" for var in self.variables if var != "static_data"]
         
         # Static features: include only those keys from static_data that are marked for training and exclude meta-keys.
@@ -608,7 +618,7 @@ class Preprocessor:
         measurements["measurement_time_from_admission"] = (
             measurements["measurement_offset"] - measurements["min_offset"]
         )
-
+        # print(measurements.head(40))
         # measurements["measurement_offset"] = pd.to_numeric(
         #     measurements["measurement_offset"], errors="coerce"
         # )
@@ -719,7 +729,7 @@ class Preprocessor:
             "bodyheight": "height_value",
         }
         merged_df.rename(columns=treatmentnames_mapping, inplace=True)
-
+        
         # print unique treatment names after mapping
         # print("Unique treatment names after mapping:")
         # print(merged_df.columns.unique())
@@ -783,9 +793,12 @@ class Preprocessor:
         # print(
         #     f'number of unique stay_ids before filtering: {merged_df["stay_id"].nunique()}'
         # )
+        self.data_process["merged"] = merged_df
         # filter age
         merged_df = merged_df[merged_df["age_value"] >= 18]
         merged_df["age_value"] = merged_df["age_value"].apply(lambda x: min(x, 90))
+
+        
 
         for feature, (lower, upper) in bounds.items():
             if feature in merged_df.columns:
@@ -861,6 +874,16 @@ class Preprocessor:
             "static": {idx: feature for idx, feature in enumerate(static_feature_names)}
         }
 
-
+        print(train_df.head(40))
+        self.data_process["sequences_train"] = sequences_train
+        self.data_process["sequences_test"] = sequences_test
+        # print("Correlation matrix for TUDD dataset (scaled_train):")
+        # tudd_corr = train_df[self.NUMERICAL_FEATURES].corr()
+        # plt.figure(figsize=(12, 8))
+        # sns.heatmap(tudd_corr, annot=True, fmt='.2f', cmap='coolwarm')
+        # plt.title("Correlation Matrix - TUDD")
+        # plt.show()
+        self.seq_feature_names = seq_feature_names
+        self.staic_feature_names = static_feature_names
         self.data_process["sequences_train"] = sequences_train
         self.data_process["sequences_test"] = sequences_test

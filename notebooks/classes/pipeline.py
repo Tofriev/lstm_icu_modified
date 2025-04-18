@@ -48,12 +48,16 @@ class Pipeline(object):
         dm1.data["mimic"] = {}
         dm1.load_mimic()
         dm1.preprocess("mimic")
+        dm1.compute_patient_statistics("mimic")
+        #dm1.plot_time_missingness_heatmap("mimic")
         feature_names = dm1.feature_names
         numerical_features = dm1.numerical_features
         print('TUDD')
         dm1.data["tudd"] = {}
         dm1.load_tudd()
         dm1.preprocess("tudd")
+        dm1.compute_patient_statistics("tudd")
+        #dm1.plot_time_missingness_heatmap("tudd")
         
         # Retrieve splits from dm1
         mimic_train_1 = dm1.data["mimic"]["sequences_train"]
@@ -87,6 +91,9 @@ class Pipeline(object):
         dm2.data["tudd"] = {}
         dm2.load_tudd()
         dm2.preprocess("tudd")
+        dm2.compute_patient_statistics("tudd")
+        dm2.plot_time_missingness_heatmap("tudd")
+
         feature_names = dm2.feature_names
         numerical_features = dm2.numerical_features
         # print("MIMIC")
@@ -333,13 +340,25 @@ class Pipeline(object):
         first_fraction = fractions[0]
         models = list(self.fraction_results[first_fraction].keys())
 
+        custom_colors = {
+        "lstm_static": "red",
+        "mutli_channel_lstm_static": "blue"
+        }
+
+        custom_labels = {
+            "lstm_static": "Lstm",
+            "mutli_channel_lstm_static": "MultiChannelLstm"
+        }
+
         plt.figure(figsize=(8, 6))
 
         for model_name in models:
             aurocs = [
                 self.fraction_results[f][model_name][0]["test_auroc"] for f in fractions
             ]
-            plt.plot(fractions, aurocs, marker="o", label=model_name)
+            color = custom_colors.get(model_name, None)
+            label = custom_labels.get(model_name, model_name)
+            plt.plot(fractions, aurocs, label=label, color=color)
 
         plt.xlabel("Number of Training Samples")
         plt.ylabel("AUROC")
@@ -482,7 +501,7 @@ class MultiDatasetPipeline(Pipeline):
             {}
         )  # Will hold preprocessed DatasetManager objects per dataset_type
 
-    def run_all(self, model_list, memorize=False, explain_method='plot_shap_heatmap_mean_abs', num_samples=1000):
+    def run_all(self, model_list, memorize=False, explain_method=None, num_samples=1000):
         all_results = {}
         # Loop over each dataset type.
         for ds in self.dataset_types:
