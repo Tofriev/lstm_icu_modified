@@ -56,8 +56,10 @@ class SHAPExplainerBase:
     def plot_shap_heatmap_mean_abs(self):
         if self.shap_values is None:
             raise ValueError("SHAP values not set.")
-
-        shap_seq = self.shap_values[1][0]    # (batch, time, #dynamic)
+        # choose 0 for survival and 1 for non survival
+        label_expl = 1
+        print(f'shap set to explainatino for label {label_expl}')
+        shap_seq = self.shap_values[label_expl][0]    # (batch, time, #dynamic)
         shap_static = self.shap_values[1][1] # (batch, #static)
         time_steps = self.test_seq_data_np.shape[1]
 
@@ -145,6 +147,177 @@ class SHAPExplainerBase:
         cbar.set_label("Mean Absolute SHAP (Log Scale)")
 
         plt.show()
+        
+    def plot_single_feature_time_shap_three_train_datasets(self, file_path1, file_path2, file_path3, sample_idx, feature_to_explain, model1_name, model2_name, model3_name, input_type='sequential', feature_idx=None):
+        """
+        Plot a single feature's values over time together with the corresponding SHAP values 
+        for non-survival (label 1) from three different models. These models are of the same type,
+        but trained on different training datasets. The test data is assumed to be the same across files.
+        
+        Parameters:
+            file_path1 (str): JSON file path for the first training dataset.
+            file_path2 (str): JSON file path for the second training dataset.
+            file_path3 (str): JSON file path for the third training dataset.
+            sample_idx (int): The sample index to plot.
+            feature_to_explain (str): The feature name to annotate.
+            model1_name (str): Label/name for model 1.
+            model2_name (str): Label/name for model 2.
+            model3_name (str): Label/name for model 3.
+            input_type (str): Either 'sequential' or 'static'.
+            feature_idx (int): The index of the feature to plot.
+        """
+     
+        # Load JSON files.
+        with open(file_path1, "r") as f:
+            data1 = json.load(f)
+        with open(file_path2, "r") as f:
+            data2 = json.load(f)
+        with open(file_path3, "r") as f:
+            data3 = json.load(f)
+            
+        # Use test data from the first file (assuming it's identical across all files).
+        test_seq_data = np.array(data1["test_data"]["seq"])
+        test_static_data = np.array(data1["test_data"]["static"])
+        test_labels = np.array(data1["test_data"]["labels"])
+        
+        # Get the scaler from file1 metadata.
+        if "metadata" in data1 and "scaler" in data1["metadata"]:
+            scaler_info = data1["metadata"]["scaler"]
+            class DummyScaler:
+                pass
+            dummy = DummyScaler()
+            dummy.mean_ = np.array(scaler_info["mean"])
+            dummy.scale_ = np.array(scaler_info["scale"])
+            scaler = dummy
+        else:
+            raise ValueError("No scaler found in the JSON metadata of the first file.")
+        
+        # Extract SHAP values for non-survival (label 1) from each JSON.
+        label_selection  = "label_1"
+        shap_seq1 = np.array(data1["shap_values"][label_selection]["sequential"])
+        shap_static1 = np.array(data1["shap_values"][label_selection]["static"])
+        shap_seq2 = np.array(data2["shap_values"][label_selection]["sequential"])
+        shap_static2 = np.array(data2["shap_values"][label_selection]["static"])
+        shap_seq3 = np.array(data3["shap_values"][label_selection]["sequential"])
+        shap_static3 = np.array(data3["shap_values"][label_selection]["static"])
+        
+        # Depending on the input type, extract raw feature values and corresponding SHAP values.
+        if input_type.lower() == 'sequential':
+            ts_length = test_seq_data.shape[1]
+            raw_values = test_seq_data[sample_idx, :, feature_idx]
+            shap_vals_model1 = shap_seq1[sample_idx, :, feature_idx]
+            shap_vals_model2 = shap_seq2[sample_idx, :, feature_idx]
+            shap_vals_model3 = shap_seq3[sample_idx, :, feature_idx]
+        elif input_type.lower() == 'static':
+            ts_length = test_seq_data.shape[1]  # use the time steps from the sequential branch
+            raw_value = test_static_data[sample_idx, feature_idx]
+            raw_values = np.repeat(raw_value, ts_length)
+            shap_val1 = shap_static1[sample_idx, feature_idx]
+            shap_val2 = shap_static2[sample_idx, feature_idx]
+            shap_val3 = shap_static3[sample_idx, feature_idx]
+            shap_vals_model1 = np.repeat(shap_val1, ts_length)
+            shap_vals_model2 = np.repeat(shap_val2, ts_length)
+            shap_vals_model3 = np.repeat(shap_val3, ts_length)
+        else:
+            raise ValueError("input_type must be either 'sequential' or 'static'.")
+        
+        # Descale the raw feature values.
+        try:
+            feature_scale = scaler.scale_[feature_idx]
+            feature_mean = scaler.mean_[feature_idx]
+            feature_values = raw_values * feature_scale + feature_mean
+        except Exception as e:
+            print("Error in descaling:", e)
+            feature_values = raw_values
+        
+        time_steps = np.arange(ts_length)
+        
+        # Create the plot.
+        fig, ax1 = plt.subplots(figsize=(10, 5))
+        ax1.set_xlabel("Time Step")
+        ax1.set_ylabel("Feature Value")
+        ax1.plot(time_steps, feature_values, color="black", linewidth=2.5, label="Feature Value")
+        ax1.tick_params(axis="y")
+        
+        # Plot SHAP values from each model.
+        ax2 = ax1.twinx()
+        ax2.set_ylabel("SHAP Value [Non-Survival]")
+        # Assign distinct colors for clarity.
+        ax2.plot(time_steps, shap_vals_model1, color='blue', linestyle="--", linewidth=1.5, alpha=0.6, label=f"SHAP {model1_name}")
+        ax2.plot(time_steps, shap_vals_model2, color='red', linestyle="--", linewidth=1.5, alpha=0.6, label=f"SHAP {model2_name}")
+        ax2.plot(time_steps, shap_vals_model3, color='green', linestyle="--", linewidth=1.5, alpha=0.6, label=f"SHAP {model3_name}")
+        
+        # Adjust y-axis limits based on combined SHAP values.
+        combined_shap = np.concatenate([shap_vals_model1, shap_vals_model2, shap_vals_model3])
+        min_val = np.min(combined_shap)
+        max_val = np.max(combined_shap)
+        margin = 0.1 * (max_val - min_val) if (max_val - min_val) != 0 else 0.1
+        ax2.set_ylim(min_val - margin, max_val + margin)
+        
+        ax1.set_title(f"Feature: {feature_to_explain} (Sample {sample_idx})")
+        
+        # Combine legends.
+        lines1, labels1 = ax1.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax2.legend(lines1 + lines2, labels1 + labels2, loc="upper right")
+        
+        # Build annotation text for predicted and actual classes.
+        pred_text = ""
+        actual_label_val = test_labels[sample_idx]
+        actual_label_str = "Survival" if actual_label_val == 0 else "Non Survival"
+        
+        # Model 1 predictions.
+        if "predictions" in data1:
+            pred1 = data1["predictions"][sample_idx]
+            p_surv1 = pred1.get("p_surv", None)
+            p_non_surv1 = pred1.get("p_non_surv", None)
+            if p_surv1 is not None and p_non_surv1 is not None:
+                if p_surv1 >= p_non_surv1:
+                    predicted_class_str1 = "Survival"
+                    predicted_prob1 = p_surv1
+                else:
+                    predicted_class_str1 = "Non Survival"
+                    predicted_prob1 = p_non_surv1
+                pred_text += f"{model1_name} Predicted: {predicted_class_str1} (P={predicted_prob1:.2f})\n"
+        
+        # Model 2 predictions.
+        if "predictions" in data2:
+            pred2 = data2["predictions"][sample_idx]
+            p_surv2 = pred2.get("p_surv", None)
+            p_non_surv2 = pred2.get("p_non_surv", None)
+            if p_surv2 is not None and p_non_surv2 is not None:
+                if p_surv2 >= p_non_surv2:
+                    predicted_class_str2 = "Survival"
+                    predicted_prob2 = p_surv2
+                else:
+                    predicted_class_str2 = "Non Survival"
+                    predicted_prob2 = p_non_surv2
+                pred_text += f"{model2_name} Predicted: {predicted_class_str2} (P={predicted_prob2:.2f})\n"
+        
+        # Model 3 predictions.
+        if "predictions" in data3:
+            pred3 = data3["predictions"][sample_idx]
+            p_surv3 = pred3.get("p_surv", None)
+            p_non_surv3 = pred3.get("p_non_surv", None)
+            if p_surv3 is not None and p_non_surv3 is not None:
+                if p_surv3 >= p_non_surv3:
+                    predicted_class_str3 = "Survival"
+                    predicted_prob3 = p_surv3
+                else:
+                    predicted_class_str3 = "Non Survival"
+                    predicted_prob3 = p_non_surv3
+                pred_text += f"{model3_name} Predicted: {predicted_class_str3} (P={predicted_prob3:.2f})\n"
+        
+        pred_text += f"Actual: {actual_label_str}"
+        
+        # Add annotation box.
+        ax_annot = fig.add_axes([0.1, 0.05, 0.8, 0.1])
+        ax_annot.axis("off")
+        ax_annot.text(0.5, 0.2, pred_text,
+                    ha='center', va='center', fontsize=10,
+                    bbox=dict(facecolor='white', alpha=0.8, boxstyle='round,pad=0.5'))
+        plt.subplots_adjust(bottom=0.25)
+        plt.show()
 
     def plot_single_feature_time_shap(self, sample_idx, feature_to_explain, input_type='sequential', feature_idx=None):
         """
@@ -156,7 +329,7 @@ class SHAPExplainerBase:
             raise ValueError("SHAP values have not been set. Run extraction or load from file first.")
         
 
-        if input_type == 'Sequential':
+        if input_type == 'sequential':
             branch_idx = 0
             data_array = self.test_seq_data_np
             ts_length = data_array.shape[1]
@@ -190,6 +363,7 @@ class SHAPExplainerBase:
         ax1.plot(time_steps, feature_values, color="black", linewidth=2.5, label="Feature Value")
         ax1.tick_params(axis="y", labelcolor="black")
 
+        #choose shap val
         shap_vals = self.shap_values[1][branch_idx]
         if input_type == 'sequential':
             shap_vals_non_surv = shap_vals[sample_idx, :, feature_idx]
@@ -198,7 +372,7 @@ class SHAPExplainerBase:
             shap_vals_non_surv = np.repeat(shap_val_single, ts_length)
 
         ax2 = ax1.twinx()
-        ax2.set_ylabel("SHAP Value [Non-Survival]")
+        ax2.set_ylabel("SHAP Value [Non Survival]")
         ax2.plot(time_steps, shap_vals_non_surv, color="red", linestyle="--", linewidth=1.5,
                 alpha=0.6, label="SHAP (Non Survival)")
         min_val = np.min(shap_vals_non_surv)

@@ -2,7 +2,7 @@ import os
 import sys
 import pandas as pd
 from sklearn.model_selection import train_test_split
-from classes.preprocessor import Preprocessor
+from classes.preprocessor_mbp import Preprocessor_MBP
 from utils import set_seed
 import random
 from sklearn.preprocessing import StandardScaler
@@ -15,7 +15,7 @@ project_root = os.path.abspath(os.path.join(os.getcwd(), ".."))
 sys.path.append(project_root)
 
 
-class DatasetManager:
+class DatasetManager_MBP:
     def __init__(self, variables: list, parameters={}):
         # dataset types: mimic_mimic, mimic_tudd, tudd_tudd,
         # tudd_mimic, tudd_fract
@@ -302,7 +302,7 @@ class DatasetManager:
             if hasattr(self, "scaler"):
                 preprocessor_args["scaler"] = self.scaler
                 print("used tudd scaler")
-            preprocessor_mimic = Preprocessor(**preprocessor_args)
+            preprocessor_mimic = Preprocessor_MBP(**preprocessor_args)
             preprocessor_mimic.process()
             # has the attributes: data_process (dict with:
             # pre_processing, aggregated, merged, imputed, scaled, sequences,
@@ -329,7 +329,7 @@ class DatasetManager:
                 print("used mimic scaler")
 
 
-            preprocessor_tudd = Preprocessor(**preprocessor_args)
+            preprocessor_tudd = Preprocessor_MBP(**preprocessor_args)
 
             preprocessor_tudd.process()
             self.data["tudd"] = preprocessor_tudd.data_process
