@@ -1,77 +1,94 @@
-WITH mort AS (
-    SELECT
-        ic.subject_id,
-        ic.stay_id,
-        ic.hadm_id,
-        ic.intime,
-       	datetime(ic.intime, '+24 hours') AS first_day_end,
-        CASE
-          WHEN 
-            adm.deathtime BETWEEN ic.intime AND ic.outtime AND adm.deathtime >= datetime(ic.intime, '+25 hours') THEN 1
-            ELSE 0
-        END AS mortality   
-    FROM icustays ic
-    INNER JOIN admissions adm ON ic.hadm_id = adm.hadm_id
+WITH long_stays AS (
+    SELECT *
+    FROM icustays
+    WHERE outtime >= datetime(intime,'+25 hours')
 ),
-height_data AS ( -- same logic for height 
+mort AS (
     SELECT
-        icu.stay_id,
-        icu.intime,
+        ls.subject_id,
+        ls.stay_id,
+        ls.hadm_id,
+        ls.intime,
+        ls.outtime,
+        datetime(ls.intime,'+24 hours')                               AS first_day_end,
+        CASE
+            WHEN admissions.deathtime BETWEEN ls.intime AND ls.outtime
+                 AND admissions.deathtime >= datetime(ls.intime,'+25 hours')
+            THEN 1 ELSE 0 END                                        AS mortality
+    FROM long_stays ls
+    JOIN admissions ON admissions.hadm_id = ls.hadm_id
+),
+hw_raw AS (
+    SELECT
+        ls.stay_id,
+        ls.intime,
         ce.charttime,
-        ce.valuenum AS height,
+        ce.itemid,
+        ce.valuenum                                                  AS value,
         CASE
-            WHEN ce.charttime BETWEEN icu.intime AND datetime(icu.intime, '+24 hours') THEN 'after'
-            ELSE 'before'
-        END AS time_category
-    FROM
-        icustays icu
-        INNER JOIN chartevents ce ON icu.stay_id = ce.stay_id
-    WHERE
-        ce.valuenum IS NOT NULL AND
-        ce.valuenum != 0 AND
-        ce.itemid IN (226730) 
-        AND ce.valuenum <= 260
+            WHEN ce.charttime BETWEEN ls.intime
+                                 AND datetime(ls.intime,'+24 hours')
+            THEN 'after' ELSE 'before' END                           AS time_flag
+    FROM long_stays ls
+    JOIN chartevents ce ON ce.stay_id = ls.stay_id
+    WHERE ce.itemid IN (226730, 226512)
+      AND ce.valuenum IS NOT NULL
+      AND ( (ce.itemid = 226730 AND ce.valuenum BETWEEN 20  AND 260)  /* height  cm */
+         OR (ce.itemid = 226512 AND ce.valuenum BETWEEN 20  AND 500) )/* weight  kg */
 ),
-height_after AS (
+hw_after AS (
     SELECT
         stay_id,
-        AVG(height) AS height_mean
-    FROM height_data
-    WHERE time_category = 'after'
+        MAX(CASE WHEN itemid = 226730 THEN 1 END)               AS has_h,
+        MAX(CASE WHEN itemid = 226512 THEN 1 END)               AS has_w,
+        AVG(CASE WHEN itemid = 226730 THEN value END)           AS height_mean,
+        AVG(CASE WHEN itemid = 226512 THEN value END)           AS weight_mean
+    FROM hw_raw
+    WHERE time_flag = 'after'
     GROUP BY stay_id
 ),
-height_before AS (
+hw_before AS (
     SELECT
         stay_id,
-        height AS height_mean,
-        ROW_NUMBER() OVER(PARTITION BY stay_id ORDER BY ABS(JULIANDAY(charttime) - JULIANDAY(intime))) AS rn
-    FROM height_data
-    WHERE time_category = 'before'
+        itemid,
+        value                                                     AS vw,
+        ROW_NUMBER() OVER (
+            PARTITION BY stay_id, itemid
+            ORDER BY ABS(julianday(charttime) - julianday(intime))
+        )                                                         AS rn
+    FROM hw_raw
+    WHERE time_flag = 'before'
 ),
-height_final AS (
+height_fallback AS (
+    SELECT stay_id, vw AS height_mean
+    FROM hw_before
+    WHERE itemid = 226730 AND rn = 1
+),
+weight_fallback AS (
+    SELECT stay_id, vw AS weight_mean
+    FROM hw_before
+    WHERE itemid = 226512 AND rn = 1
+),
+hw_final AS (
     SELECT
-        stay_id,
-        height_mean
-    FROM height_after
-    UNION ALL
-    SELECT
-        stay_id,
-        height_mean
-    FROM height_before
-    WHERE rn = 1 AND stay_id NOT IN (SELECT stay_id FROM height_after)
+        ls.stay_id,
+        COALESCE(ha.height_mean, hf.height_mean) AS height_mean,
+        COALESCE(ha.weight_mean, wf.weight_mean) AS weight_mean
+    FROM long_stays ls
+    LEFT JOIN hw_after       ha ON ha.stay_id = ls.stay_id
+    LEFT JOIN height_fallback hf ON hf.stay_id = ls.stay_id
+    LEFT JOIN weight_fallback wf ON wf.stay_id = ls.stay_id
 )
 SELECT
-  m.mortality,
-  p.anchor_age,
-  p.gender,
-  hf.height_mean AS height,
-  m.intime,
-  m.first_day_end,
-  ic.stay_id
-FROM
-  icustays ic
-INNER JOIN mort m ON ic.stay_id = m.stay_id
-INNER JOIN patients p ON ic.subject_id = p.subject_id
-LEFT JOIN height_final AS hf ON ic.stay_id = hf.stay_id
-ORDER BY
-  ic.stay_id
+    m.stay_id,
+    m.intime,
+    m.first_day_end,
+    m.mortality,
+    p.anchor_age,
+    p.gender,
+    hw.height_mean,
+    hw.weight_mean
+FROM mort          m
+JOIN patients      p  ON p.subject_id = m.subject_id
+LEFT JOIN hw_final hw ON hw.stay_id   = m.stay_id
+ORDER BY m.stay_id;
