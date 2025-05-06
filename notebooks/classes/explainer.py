@@ -278,7 +278,7 @@ class SHAPExplainerBase:
                 else:
                     predicted_class_str1 = "Non Survival"
                     predicted_prob1 = p_non_surv1
-                pred_text += f"{model1_name} Predicted: {predicted_class_str1} (P={predicted_prob1:.2f})\n"
+                pred_text += f"{model1_name} Prediction: {predicted_class_str1} (P={predicted_prob1:.2f})\n"
         
         # Model 2 predictions.
         if "predictions" in data2:
@@ -292,7 +292,7 @@ class SHAPExplainerBase:
                 else:
                     predicted_class_str2 = "Non Survival"
                     predicted_prob2 = p_non_surv2
-                pred_text += f"{model2_name} Predicted: {predicted_class_str2} (P={predicted_prob2:.2f})\n"
+                pred_text += f"{model2_name} Prediction: {predicted_class_str2} (P={predicted_prob2:.2f})\n"
         
         # Model 3 predictions.
         if "predictions" in data3:
@@ -306,7 +306,7 @@ class SHAPExplainerBase:
                 else:
                     predicted_class_str3 = "Non Survival"
                     predicted_prob3 = p_non_surv3
-                pred_text += f"{model3_name} Predicted: {predicted_class_str3} (P={predicted_prob3:.2f})\n"
+                pred_text += f"{model3_name} Prediction: {predicted_class_str3} (P={predicted_prob3:.2f})\n"
         
         pred_text += f"Actual: {actual_label_str}"
         
@@ -773,7 +773,7 @@ class SHAPExplainerBase:
                     predicted_prob2 = p_non_surv2
                 pred_text += f"{model2_name} Predicted: {predicted_class_str2} (P={predicted_prob2:.2f})\n"
         
-        pred_text += f"Actual: {actual_label_str}"
+        pred_text += f"Label: {actual_label_str}"
         
         ax_annot = fig.add_axes([0.1, 0.05, 0.8, 0.1])
         ax_annot.axis("off")

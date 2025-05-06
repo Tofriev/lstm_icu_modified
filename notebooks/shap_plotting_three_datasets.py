@@ -54,21 +54,23 @@ for idx in range(len(explainer.test_seq_data_np)):
         elif is_uncertain:
             uncertain_actual_non_surv.append(idx)
 
-# --- Select up to 5 samples from each group ---
-selected_pred_surv_actual_surv = pred_surv_actual_surv[:5]
-selected_pred_non_surv_actual_surv = pred_non_surv_actual_surv[:5]
-selected_uncertain_actual_surv = uncertain_actual_surv[:5]
 
-selected_pred_surv_actual_non_surv = pred_surv_actual_non_surv[:5]
-selected_pred_non_surv_actual_non_surv = pred_non_surv_actual_non_surv[:5]
-selected_uncertain_actual_non_surv = uncertain_actual_non_surv[:5]
+selected_pred_surv_actual_surv = pred_surv_actual_surv[:40]
+selected_pred_non_surv_actual_surv = pred_non_surv_actual_surv[:40]
+selected_uncertain_actual_surv = uncertain_actual_surv[:40]
 
-selected_indices = (selected_pred_surv_actual_surv +
-                    selected_pred_non_surv_actual_surv +
-                    selected_uncertain_actual_surv +
-                    selected_pred_surv_actual_non_surv +
-                    selected_pred_non_surv_actual_non_surv +
-                    selected_uncertain_actual_non_surv)
+selected_pred_surv_actual_non_surv = pred_surv_actual_non_surv[:40]
+selected_pred_non_surv_actual_non_surv = pred_non_surv_actual_non_surv#[:40]
+selected_uncertain_actual_non_surv = uncertain_actual_non_surv[:40]
+
+selected_indices = (
+                    # selected_pred_surv_actual_surv +
+                    # selected_pred_non_surv_actual_surv +
+                    #selected_uncertain_actual_surv +
+                    # selected_pred_surv_actual_non_surv +
+                    selected_pred_non_surv_actual_non_surv #+
+                    #selected_uncertain_actual_non_surv
+                    )
 
 
 
@@ -82,10 +84,12 @@ print("Predicted Survival:", selected_pred_surv_actual_non_surv)
 print("Predicted Non Survival:", selected_pred_non_surv_actual_non_surv)
 print("Uncertain:", selected_uncertain_actual_non_surv)
 
-# --- Feature to explain ---
-# 0: mps | 1: gcs | 6: wbc | 7: platelets | 5: hr 
 
-feature_idx = 0
+# --- Feature to explain ---
+# 0: mps | 1: gcs | 6: wbc | 7: platelets | 5: hr |10: lactate | 11: temperature | 12: weight
+# ['mbp_value', 'gcs_total_value', 'glc_value', 'creatinine_value', 'potassium_value', 'hr_value', 'wbc_value', 'platelets_value', 'inr_value', 'anion_gap_value', 'lactate_value', 'temperature_value', 'weight_value', 'age_value', 'gender_value']
+
+feature_idx = 5
 feature_to_explain = explainer.feature_names[feature_idx] if explainer.feature_names is not None else f"Feature {feature_idx}"
 
 # --- Define JSON file paths for each training dataset ---
@@ -95,9 +99,11 @@ file_path3 = "SHAP_scores/multi_channel_lstm_static_tudd_tudd_1000.json"
 
 # --- Loop over selected samples and plot using the three-dataset function ---
 
-selected_indices = [idx for idx in range(len(explainer.test_seq_data_np))]
-# selected_indices = selected_indices[:100]
-selected_indices = [0, 5, 8, 61]
+#all_indices = [idx for idx in range(len(explainer.test_seq_data_np))]
+
+#selected_indices = selected_indices[:100]
+#selected_indices = [8, 52, 250, 941, 740, 148, 661]
+selected_indices = [8, 941, 661]
 for sample_idx in selected_indices:
     explainer.plot_single_feature_time_shap_three_train_datasets(
         file_path1=file_path1,

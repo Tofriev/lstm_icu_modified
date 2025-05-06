@@ -1,7 +1,7 @@
 WITH long_stays AS (
     SELECT *
     FROM icustays
-    WHERE outtime >= datetime(intime,'+25 hours')
+    WHERE outtime >= datetime(intime,'+24 hours')
 ),
 mort AS (
     SELECT
@@ -10,10 +10,9 @@ mort AS (
         ls.hadm_id,
         ls.intime,
         ls.outtime,
-        datetime(ls.intime,'+24 hours')                               AS first_day_end,
+        datetime(ls.intime,'+24 hours')    AS first_day_end,
         CASE
             WHEN admissions.deathtime BETWEEN ls.intime AND ls.outtime
-                 AND admissions.deathtime >= datetime(ls.intime,'+25 hours')
             THEN 1 ELSE 0 END                                        AS mortality
     FROM long_stays ls
     JOIN admissions ON admissions.hadm_id = ls.hadm_id
@@ -83,11 +82,11 @@ SELECT
     m.stay_id,
     m.intime,
     m.first_day_end,
-    m.mortality,
-    p.anchor_age,
-    p.gender,
-    hw.height_mean,
-    hw.weight_mean
+    m.mortality AS mortality_value,
+    p.anchor_age AS age_value,
+    p.gender AS gender_value,
+    hw.height_mean AS height_value,
+    hw.weight_mean AS weight_value
 FROM mort          m
 JOIN patients      p  ON p.subject_id = m.subject_id
 LEFT JOIN hw_final hw ON hw.stay_id   = m.stay_id
