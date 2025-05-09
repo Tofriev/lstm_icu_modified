@@ -103,7 +103,25 @@ file_path3 = "SHAP_scores/multi_channel_lstm_static_tudd_tudd_1000.json"
 
 #selected_indices = selected_indices[:100]
 #selected_indices = [8, 52, 250, 941, 740, 148, 661]
-selected_indices = [8, 941, 661]
+selected_indices = [8, 661,941]
+
+for sample_idx in selected_indices:
+    explainer.plot_single_feature_time_shap_three_train_datasets_standardized(
+        file_path1=file_path1,
+        file_path2=file_path2,
+        file_path3=file_path3,
+        sample_idx=sample_idx,
+        feature_to_explain=feature_to_explain,
+        model1_name=model1_name,
+        model2_name=model2_name,
+        model3_name=model3_name,
+        feature_idx=feature_idx,
+        input_type='sequential'
+    )
+
+
+
+# %%
 for sample_idx in selected_indices:
     explainer.plot_single_feature_time_shap_three_train_datasets(
         file_path1=file_path1,
