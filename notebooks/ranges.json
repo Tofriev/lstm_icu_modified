@@ -1,0 +1,22 @@
+{
+  "mbp_value":  {
+          "feature_ranges":{ "min": 50,  "max": 130 },
+          "shap_range": { "min": -0.04, "max": 0.095 }
+        },
+  "lactate_value":  {
+          "feature_ranges":{ "min": 0.55,   "max": 7 },
+          "shap_range": { "min": -0.04, "max": 0.095 }
+        },
+  "temperature_value":  {
+        "feature_ranges":{ "min": 35, "max": 39  },
+        "shap_range": { "min": -0.04, "max": 0.095 }
+      }, 
+  "gcs_total_value":  {
+          "feature_ranges":{ "min": 2, "max": 16  },
+          "shap_range": { "min": -0.2, "max": 0.6 }
+        },
+  "hr_value":  {
+          "feature_ranges": { "min": 50, "max": 140  },
+          "shap_range": { "min": -0.04, "max": 0.095 }
+        }
+}
